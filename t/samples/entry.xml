@@ -1,0 +1,10 @@
+<?xml version="1" encoding="utf-8"?>
+<entry xmlns:ex="http://example.com/">
+  <id>tag:example.org,2007:2</id>
+  <category scheme="http://example.com/" term="hello" />
+  <content type="application/xml">
+    <ex:tag>Hello, World!</ex:tag>
+  </content>
+  <title>My Entry</title>
+  <updated>2007-02-20T23:29:59Z</updated>
+</entry>
