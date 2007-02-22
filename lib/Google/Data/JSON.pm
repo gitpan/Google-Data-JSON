@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.1');
+use version; our $VERSION = qv('0.0.2');
 
 use XML::Simple;
 use JSON;
@@ -26,19 +26,73 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw( );
 
 our @Elements = ( 
-    qw( feed entry ), 
-    qw( id title subtitle icon logo rights ),
-    qw( link category ),
-    qw( author contributor generator name email uri ),
-    qw( updated published ),
-    qw( content summary source ),
-#    qw( service workspace collection categories accept ),
+    # Atom Feed/Entry
+    qw(
+	author category content contributor email entry feed generator 
+        icon id link logo name published rights source subtitle summary 
+        title updated uri
+    ), 
+    # Atom Service/Category Documents
+    qw(
+	app:accept app:categories app:collection app:service app:workspace
+    ),
+    # Google Data APIs
+    qw(
+	gd:comments gd:contactSection gd:email gd:entryLink gd:feedLink 
+	gd:geoPt gd:im gd:originalEvent gd:phoneNumber gd:postalAddress 
+	gd:rating gd:recurrence gd:recurrenceException gd:reminder gd:when 
+	gd:where gd:who
+    ),
 );
 
-our $Value = '$t';
+our $ValueKey = '$t';
 
 our $PrettyPrinting = 0;
 $JSON::AUTOCONVERT = 0;
+
+sub new {
+    my $class = shift;
+    my $stream = shift;
+    my $self = bless { }, $class;
+    $self->set($stream);
+    $self;
+}
+
+sub set {
+    my $self = shift;
+    $self->{stream} = shift;
+    $self->{stream} = file($self->{stream})->slurp 
+	if $self->{stream} !~ /[\r\n]/ and -f $self->{stream};
+    $self;
+}
+
+sub _type {
+    my $self = shift;
+    if (not ref $self->{stream}) {
+	if ($self->{stream} =~ /^</) { return 'xml' }
+	elsif ($self->{stream} =~ /^\{/) { return 'json' }
+    }
+    elsif (ref($self->{stream}) =~ /^XML::Atom/) { return 'atom' }
+    elsif (ref $self->{stream} eq 'HASH') { return 'obj' }
+}
+
+sub AUTOLOAD {
+    my $self = shift;
+    my $method = our $AUTOLOAD;
+    $method =~ s/.*:://;
+    if (my ($to) = $method =~ /(?:as|to)(?:_)?(xml|json|atom|obj(?:ect)?)$/i) {
+	$to = lc $to;
+	my $from = $self->_type;
+	if ($from eq $to) {
+	    return $self->{stream};
+	}
+	else {
+	    $method = $from . '_to_' . $to;
+	    no strict 'refs'; ## no critic
+	    return *{$method}->($self->{stream});
+	}
+    }
+}
 
 sub xml_to_json {
     obj_to_json(xml_to_obj(shift));
@@ -64,7 +118,7 @@ sub xml_to_obj {
     my $version = $1;
     my $encoding = $2;
 
-    my $obj = XMLin($xml, KeepRoot => 1, ForceArray => 0, ContentKey => $Value);
+    my $obj = XMLin($xml, KeepRoot => 1, ForceArray => 0, ContentKey => $ValueKey);
 
     $obj->{version} = $version if $version;
     $obj->{encoding} = $encoding if $encoding;
@@ -107,7 +161,7 @@ sub obj_to_xml {
     $obj = _force_array($obj);
 
     "<?xml version=\"$version\" encoding=\"$encoding\"?>\n"
-	. XMLout($obj, KeepRoot => 1, ContentKey => $Value);
+	. XMLout($obj, KeepRoot => 1, ContentKey => $ValueKey);
 }
 
 sub obj_to_json {
@@ -189,10 +243,11 @@ Google::Data::JSON - XML-JSON converter based on Google Data APIs
 
 =head1 SYNOPSIS
 
-    use Google::Data::JSON qw( :all );
+    use Google::Data::JSON;
 
     ## Convert an XML feed into a JSON feed.
-    print xml_to_json($xml);
+    $parser = Google::Data::JSON->new($xml);
+    print $parser->as_json;
 
     ## XML elements, which are not Atom standards, should be added into 
     ## the array, before converting to an XML feed or an XML::Atom 
@@ -200,11 +255,11 @@ Google::Data::JSON - XML-JSON converter based on Google Data APIs
     push @Google::Data::JSON::Elements, qw( div p i gd:when gd:where );
 
     ## Convert a JSON feed into an XML feed.
-    print json_to_xml($json);
+    $parser = Google::Data::JSON->new($json);
+    print $parser->as_xml;
 
     ## Convert an XML::Atom object into a JSON feed.
-    push @Google::Data::JSON::Elements, qw( div p i gd:when gd:where );
-    print atom_to_xml($atom);
+    print $parser->set($atom)->as_json;
 
 =head1 DESCRIPTION
 
@@ -243,89 +298,89 @@ encoding of the root element, respectively.
 
 =head1 USAGE
 
-=head2 xml_to_json($xml)
+=head2 new($stream)
 
-Converts an XML feed into a JSON feed.
-I<$xml> can be string or file name.
+Creates a new parser object from I<$stream>, such as XML and JSON,
+and returns the new Google::Data::JSON object.
+On failure, return "undef";
+
+I<$stream> can be any one of the following:
+
+=over 4
+
+=item A filename
+
+A filename of XML or JSON.
+
+=item A string of XML or JSON
+
+A string containing XML or JSON.
+
+=item An XML::Atom object
+
+An XML::Atom object, such as XML::Atom::Feed, XML::Atom::Entry, 
+XML::Atom::Service, and XML::Atom::Categories.
+
+=item A perl object
+
+A perl object, that is reference to a data structure, like HASH and ARRAY.
+
+=back
+
+=head2 set($stream)
+
+Sets new stream I<$stream>, such as XML and JSON,
+and returns I<$self>.
+
+=head2 as_xml
+
+Converts into a string of XML.
+
+XML elements, which are not Atom standards, should be added into the array 
+@Google::Data::JSON::Elements, before converting to an XML feed or an 
+XML::Atom object.
+
+=head2 as_json
+
+Converts into a string of JSON.
+
+=head2 as_atom
+
+Converts into an XML::Atom object.
+
+XML elements, which are not Atom standards, should be added into the array 
+@Google::Data::JSON::Elements, before converting to an XML feed or an 
+XML::Atom object.
+
+=head2 as_obj
+
+Converts into a perl object.
+
+=head2 xml_to_json($xml)
 
 =head2 xml_to_atom($xml)
 
-Converts an XML feed into an XML::Atom object.
-I<$xml> can be string or file name.
-
-XML elements, which are not Atom standards, should be added into the array 
-@Google::Data::JSON::Elements, before converting to an XML feed or an 
-XML::Atom object.
-
 =head2 xml_to_obj($xml)
-
-Converts an XML feed into a perl object.
-I<$xml> can be string or file name.
 
 =head2 json_to_xml($json)
 
-Converts a JSON feed into an XML feed.
-I<$json> must be string, which meets the Google Data APIs.
-
-XML elements, which are not Atom standards, should be added into the array 
-@Google::Data::JSON::Elements, before converting to an XML feed or an 
-XML::Atom object.
-
 =head2 json_to_atom($json)
-
-Converts a JSON feed into an XML::Atom object.
-I<$json> must be string, which meets the Google Data APIs.
-
-XML elements, which are not Atom standards, should be added into the array 
-@Google::Data::JSON::Elements, before converting to an XML feed or an 
-XML::Atom object.
 
 =head2 json_to_obj($json)
 
-Converts a JSON feed into a perl object.
-I<$json> must be string, which meets the Google Data APIs.
-
 =head2 atom_to_xml($atom)
-
-Converts an XML::Atom object into an XML feed.
-I<$atom> must be an XML::Atom::Feed or XML::Atom::Entry object.
-
-XML elements, which are not Atom standards, should be added into the array 
-@Google::Data::JSON::Elements, before converting to an XML feed or an 
-XML::Atom object.
 
 =head2 atom_to_json($atom)
 
-Converts an XML::Atom object into a JSON feed.
-I<$atom> must be an XML::Atom::Feed or XML::Atom::Entry object.
-
 =head2 atom_to_obj($atom)
-
-Converts an XML::Atom object into a perl object.
-I<$atom> must be an XML::Atom::Feed or XML::Atom::Entry object.
 
 =head2 obj_to_xml($obj)
 
-Converts a perl object into an XML feed.
-I<$obj> must be a perl object;
-
-XML elements, which are not Atom standards, should be added into the array 
-@Google::Data::JSON::Elements, before converting to an XML feed or an 
-XML::Atom object.
-
 =head2 obj_to_json($obj)
-
-Converts a perl object into a JSON feed.
-I<$obj> must be a perl object;
 
 =head2 obj_to_atom($obj)
 
-Converts a perl object into an XML::Atom object.
-I<$obj> must be a perl object;
-
-XML elements, which are not Atom standards, should be added into the array 
-@Google::Data::JSON::Elements, before converting to an XML feed or an 
-XML::Atom object.
+=head2 _type
 
 =head2 _fix_keys
 

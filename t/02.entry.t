@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Test::More 'no_plan';
 use Path::Class;
-use Google::Data::JSON qw( obj_to_xml );
+use Google::Data::JSON;
 
 push @Google::Data::JSON::Elements, qw( ex:tag );
 
@@ -25,5 +25,5 @@ my $obj = {
     },
 };
 
-my $xml = obj_to_xml($obj);
+my $xml = Google::Data::JSON->new($obj)->as_xml;
 is $xml, file('t/samples/entry.xml')->slurp;
