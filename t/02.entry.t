@@ -3,12 +3,12 @@
 use strict;
 use warnings;
 use Test::More 'no_plan';
-use Path::Class;
-use Google::Data::JSON;
+use File::Slurp;
+use Google::Data::JSON qw( gdata add_elements );
 
-push @Google::Data::JSON::Elements, qw( ex:tag );
+add_elements( qw( ex:tag ) );
 
-my $obj = {
+my $hash = {
     entry => {
 	'xmlns:ex' => 'http://example.com/',
 	title => 'My Entry',
@@ -25,5 +25,5 @@ my $obj = {
     },
 };
 
-my $xml = Google::Data::JSON->new($obj)->as_xml;
-is $xml, file('t/samples/entry.xml')->slurp;
+my $xml = gdata($hash)->as_xml;
+is $xml, read_file('t/samples/entry.xml');

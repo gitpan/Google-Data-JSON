@@ -1,10 +1,25 @@
-2007-02-22  Takeru INOUE  <takeru.inoue at gmail.com>
+2007-03-02  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.0.3:
+	* Google/Data/JSON.pm:
+	- change: internal data is stored as Perl reference
+	- add gdata(), a shortcut for Google::Data::JSON->new()
+	- change "push @Elements to add_elements()" to get_elements()
+	   method
+	- remove set() method
+	- remove Storable::dclone from _fix_keys() _force_array() for
+	   performance reason
+	- re-implement as_xxx() methods without AUTOLOAD
+        - add openSearch elements to @Elements
+
+2007-02-22  Takeru INOUE  <takeru.inoue _ gmail.com>
 
         * release 0.0.2:
-	* implement OOP interface
-        * add some elements to @Elements
+	* Google/Data/JSON.pm
+	- implement OOP interface
+        - add app/gd elements to @Elements
 
-2007-02-20  Takeru INOUE  <takeru.inoue at gmail.com>
+2007-02-20  Takeru INOUE  <takeru.inoue _ gmail.com>
 
-        * release 0.0.1: created by h2xs 1.23 with options
-          -XAn XML::Atom::Service
+        * release 0.0.1:
+	- created by module-starter --module=Foo:Bar

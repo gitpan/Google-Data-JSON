@@ -4,234 +4,271 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.2');
+use version; our $VERSION = qv('0.0.3');
 
 use XML::Simple;
 use JSON;
-use Storable;
-use Path::Class;
+use List::MoreUtils qw( any uniq );
+use File::Slurp;
+use Perl6::Export::Attrs;
 use UNIVERSAL::require;
 
-require Exporter;
+# XML::Simple
+our $ContentKey     = '$t';
 
-our @ISA = qw(Exporter);
+# JSON
+our $PrettyPrinting = 0;
+$JSON::AUTOCONVERT  = 0;
 
-our %EXPORT_TAGS = ( 'all' => [ qw(
-    xml_to_json xml_to_atom xml_to_obj
-    json_to_xml json_to_atom json_to_obj
-    atom_to_xml atom_to_json atom_to_obj
-    obj_to_xml obj_to_json obj_to_atom
-) ] );
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-our @EXPORT = qw( );
-
-our @Elements = ( 
-    # Atom Feed/Entry
-    qw(
-	author category content contributor email entry feed generator 
-        icon id link logo name published rights source subtitle summary 
-        title updated uri
-    ), 
-    # Atom Service/Category Documents
-    qw(
-	app:accept app:categories app:collection app:service app:workspace
-    ),
-    # Google Data APIs
-    qw(
-	gd:comments gd:contactSection gd:email gd:entryLink gd:feedLink 
-	gd:geoPt gd:im gd:originalEvent gd:phoneNumber gd:postalAddress 
-	gd:rating gd:recurrence gd:recurrenceException gd:reminder gd:when 
-	gd:where gd:who
-    ),
+my @atom_elements = qw(
+    author category content contributor email entry feed generator icon id link
+    logo name published rights source subtitle summary title updated uri
 );
 
-our $ValueKey = '$t';
+my @app_elements = qw(
+    accept categories collection service workspace
+);
 
-our $PrettyPrinting = 0;
-$JSON::AUTOCONVERT = 0;
+my @gd_elements = qw(
+    attendeeStatus attendeeType comments contactSection email entryLink 
+    feedLink geoPt im originalEvent phoneNumber postalAddress rating recurrence
+     recurrenceException reminder when where who
+);
+
+my @opensearch_elements = qw(
+    totalResults startIndex itemsPerPage
+);
+
+@atom_elements         = map { ( $_, "atom:$_"         ) } @atom_elements;
+@app_elements          = map { ( $_, "app:$_"          ) } @app_elements;
+@gd_elements           = map { ( $_, "gd:$_"           ) } @gd_elements;
+@opensearch_elements   = map { ( $_, "openSearch:$_"   ) } @opensearch_elements;
+
+my @Elements
+    = ( @atom_elements, @app_elements, @gd_elements, @opensearch_elements );
 
 sub new {
-    my $class = shift;
+    my $class  = shift;
     my $stream = shift;
-    my $self = bless { }, $class;
-    $self->set($stream);
-    $self;
+
+    $stream = read_file($stream) if $stream !~ /[\r\n]/ && -f $stream;
+
+    my $data = do {
+	no strict 'refs'; ## no critic
+         *{ _type_of($stream) . '_to_hash' }->( $stream );
+    };
+
+    return bless { data => $data }, $class;
 }
 
-sub set {
-    my $self = shift;
-    $self->{stream} = shift;
-    $self->{stream} = file($self->{stream})->slurp 
-	if $self->{stream} !~ /[\r\n]/ and -f $self->{stream};
-    $self;
+sub gdata :Export { __PACKAGE__->new(@_) }
+
+sub as_xml  { hash_to_xml ( shift->{data} ) }
+sub as_json { hash_to_json( shift->{data} ) }
+sub as_atom { hash_to_atom( shift->{data} ) }
+sub as_hash { shift->{data}                }
+
+sub add_elements :Export {
+    croak "This is class method" if ref $_[0];
+
+    push @Elements, @_;
+    return @Elements = uniq @Elements;
 }
 
-sub _type {
-    my $self = shift;
-    if (not ref $self->{stream}) {
-	if ($self->{stream} =~ /^</) { return 'xml' }
-	elsif ($self->{stream} =~ /^\{/) { return 'json' }
+sub get_elements :Export {
+    croak "This is class method" if ref $_[0];
+
+    return @Elements;
+}
+
+sub _type_of {
+    my $stream = shift;
+
+    if (not ref $stream) {
+        return $stream =~ /\A </xms  ? 'xml'
+             : $stream =~ /\A \{/xms ? 'json'
+             :                          croak "Bad stream: $stream" ;
     }
-    elsif (ref($self->{stream}) =~ /^XML::Atom/) { return 'atom' }
-    elsif (ref $self->{stream} eq 'HASH') { return 'obj' }
-}
-
-sub AUTOLOAD {
-    my $self = shift;
-    my $method = our $AUTOLOAD;
-    $method =~ s/.*:://;
-    if (my ($to) = $method =~ /(?:as|to)(?:_)?(xml|json|atom|obj(?:ect)?)$/i) {
-	$to = lc $to;
-	my $from = $self->_type;
-	if ($from eq $to) {
-	    return $self->{stream};
-	}
-	else {
-	    $method = $from . '_to_' . $to;
-	    no strict 'refs'; ## no critic
-	    return *{$method}->($self->{stream});
-	}
+    else {
+        return ref($stream) =~ /\AXML::Atom/ ? 'atom'
+             : ref $stream eq 'HASH'         ? 'hash'
+             :                                  croak "Bad stream: $stream";
     }
 }
 
-sub xml_to_json {
-    obj_to_json(xml_to_obj(shift));
+sub _is_element {
+    my ($key) = @_;
+
+    my %is_element = map { ($_ => 1) } @Elements;
+    return $is_element{$key};
 }
 
-sub xml_to_atom {
-    my $xml = shift;
-    my ($root) = $xml =~ /<\?xml [^>]+? \?> \s*? <(\w+) /xm;
-    my $module = 'XML::Atom::' . ucfirst($root);
-    $module->require or croak $@;
-    $module->new(\$xml);
-}
+sub _fix_keys_of {
+    my ($data, $converting_to_json) = @_;
 
-sub xml_to_obj {
-    my $xml = shift;
+    my ($from, $to) = $converting_to_json ? (':',  '$')
+                    :                       ('\$', ':') ;
 
-    $xml = file($xml)->slurp unless $xml =~ /^<\?xml/;
-
-    $xml =~ /^<\?xml [^>]+?
-	  version=["']([\d\.]+)["'] [^>]+?	#'
-	  (?:encoding=["']([^"']+)["'])? [^>]*? #"
-	\?>/xm;
-    my $version = $1;
-    my $encoding = $2;
-
-    my $obj = XMLin($xml, KeepRoot => 1, ForceArray => 0, ContentKey => $ValueKey);
-
-    $obj->{version} = $version if $version;
-    $obj->{encoding} = $encoding if $encoding;
-
-    $obj;
-}
-
-sub json_to_xml {
-    obj_to_xml(json_to_obj(shift));
-}
-
-sub json_to_atom {
-    xml_to_atom(json_to_xml(shift));
-}
-
-sub json_to_obj {
-    _fix_keys(jsonToObj(shift), 0);
-}
-
-sub atom_to_xml {
-    shift->as_xml;
-}
-
-sub atom_to_json {
-    xml_to_json(atom_to_xml(shift));
-}
-
-sub atom_to_obj {
-    xml_to_obj(atom_to_xml(shift));
-}
-
-sub obj_to_xml {
-    my $obj = shift;
-
-    my $version = $obj->{version} || 1.0;
-    my $encoding = $obj->{encoding} || 'utf-8';
-    delete $obj->{version};
-    delete $obj->{encoding};
-
-    $obj = _force_array($obj);
-
-    "<?xml version=\"$version\" encoding=\"$encoding\"?>\n"
-	. XMLout($obj, KeepRoot => 1, ContentKey => $ValueKey);
-}
-
-sub obj_to_json {
-    objToJson(_fix_keys(shift, 1), { pretty => $PrettyPrinting, indent => 2 });
-}
-
-sub obj_to_atom {
-    xml_to_atom(obj_to_xml(shift));
-}
-
-sub _fix_keys {
-    my $obj = Storable::dclone shift;
-    my $to_json = shift;
-
-    my ($from, $to) = $to_json ? (':', '$') : ('\$', ':');
-
-    if (ref $obj eq 'HASH') {
-	for my $key (keys(%$obj)) {
-	    if ($key =~ /^[-\w]+$from[-\w]+$/) {
+    if (ref $data eq 'HASH') {
+	for my $key (keys(%{ $data })) {
+	    if ($key =~ m{\A [^$from]+ $from .+ \z}xms) {
 		my $original = $key;
-		$key =~ s/$from/$to/;
-		$obj->{$key} = $obj->{$original};
-		delete $obj->{$original};
+		$key =~ s{$from}{$to};
+		$data->{$key} = $data->{$original};
+		delete $data->{$original};
 	    }
 
-	    $obj->{$key} = _fix_keys($obj->{$key}, $to_json)
-		if ref $obj->{$key};
-
-	    ## force array
-#	    if (not $to_json and ref $obj->{$key} ne 'ARRAY' and _is_element($key)) {
-#		$obj->{$key} = [ $obj->{$key} ];
-#	    }
+	    $data->{$key} = _fix_keys_of( $data->{$key}, $converting_to_json )
+		if ref $data->{$key};
 	}
     }
-    elsif (ref $obj eq 'ARRAY') {
-	for my $element (@{ $obj }) {
-	    $element = _fix_keys($element, $to_json)
+    elsif (ref $data eq 'ARRAY') {
+	for my $element (@{ $data }) {
+	    $element = _fix_keys_of( $element, $converting_to_json )
 		if ref $element eq 'HASH';
 	}
     }
 
-    $obj;
-}
-
-sub _is_element {
-    my $key = shift;
-    my $num = grep $key eq $_, @Elements;
-    $num;
+    return $data;
 }
 
 sub _force_array {
-    my $obj = Storable::dclone shift;
+    my ($data) = @_;
 
-    if (ref $obj eq 'HASH') {
-	for my $key (keys(%$obj)) {
-	    $obj->{$key} = _force_array($obj->{$key}) if ref $obj->{$key};
+    if (ref $data eq 'HASH') {
+	for my $key ( keys(%{ $data }) ) {
+	    $data->{$key} = _force_array($data->{$key}) if ref $data->{$key};
 
-	    if (ref $obj->{$key} ne 'ARRAY' and _is_element($key)) {
-		$obj->{$key} = [ $obj->{$key} ];
+	    if (ref $data->{$key} ne 'ARRAY' && _is_element($key)) {
+		$data->{$key} = [ $data->{$key} ];
 	    }
 	}
     }
-    elsif (ref $obj eq 'ARRAY') {
-	for my $element (@{ $obj }) {
+    elsif (ref $data eq 'ARRAY') {
+	for my $element (@{ $data }) {
 	    $element = _force_array($element) if ref $element eq 'HASH';
 	}
     }
 
-    $obj;
+    return $data;
 }
+
+sub _alleviate_array {
+    my ($data) = @_;
+
+    if (ref $data eq 'HASH') {
+	for my $key ( keys(%{ $data }) ) {
+	    $data->{$key} = _alleviate_array($data->{$key}) if ref $data->{$key};
+	}
+    }
+    elsif (ref $data eq 'ARRAY') {
+	if (ref $data eq 'ARRAY' && @{ $data } == 1) {
+	    $data = _alleviate_array($data->[0]);
+	}
+	else {
+	    for my $element (@{ $data }) {
+		$element = _alleviate_array($element) if ref $element eq 'HASH';
+	    }
+	}
+    }
+
+    return $data;
+}
+
+sub xml_to_json :Export {
+    return hash_to_json( xml_to_hash(shift) );
+}
+
+sub xml_to_atom :Export {
+    my $xml    = shift;
+
+    my ($root) = $xml =~ /<\?xml [^>]+? \?> \s*? <(\w+) /xms;
+    my $module = 'XML::Atom::' . ucfirst($root);
+    $module->require || croak $@;
+
+    return $module->new(\$xml);
+}
+
+sub xml_to_hash :Export {
+    my $xml = shift;
+
+    $xml = read_file($xml) unless $xml =~ /^<\?xml/;
+
+    $xml =~ m{^
+                <\? xml [^>]+?
+                    version=["']([\d\.]+)["'] [^>]+?      #'
+                    (?:encoding=["']([^"']+)["'])? [^>]*? #"
+                \?>
+             }xms;
+    my ($version, $encoding) = ($1, $2);
+
+    my $data = XMLin(
+        $xml,
+        KeepRoot   => 1,
+        ForceArray => 0,
+        ContentKey => $ContentKey,
+    );
+
+    $data->{version}  = $version  if defined $version;
+    $data->{encoding} = $encoding if defined $encoding;
+
+    return $data;
+}
+
+sub json_to_xml :Export {
+    return hash_to_xml( json_to_hash(shift) );
+}
+
+sub json_to_atom :Export {
+    return xml_to_atom( json_to_xml(shift) );
+}
+
+sub json_to_hash :Export {
+    return _fix_keys_of( jsonToObj(shift), 0 );
+}
+
+sub atom_to_xml :Export {
+    return shift->as_xml;
+}
+
+sub atom_to_json :Export {
+    return xml_to_json( atom_to_xml(shift) );
+}
+
+sub atom_to_hash :Export {
+    return xml_to_hash( atom_to_xml(shift) );
+}
+
+sub hash_to_xml :Export {
+    my $data = shift;
+
+    my $version  = $data->{version}  || 1.0;
+    my $encoding = $data->{encoding} || 'utf-8';
+    delete $data->{version};
+    delete $data->{encoding};
+
+    $data = _force_array($data);
+
+    my $xml = "<?xml version=\"$version\" encoding=\"$encoding\"?>\n"
+        . XMLout($data, KeepRoot => 1, ContentKey => $ContentKey);
+
+    $data = _alleviate_array($data);
+
+    return $xml;
+}
+
+sub hash_to_json :Export {
+    return objToJson(
+        _fix_keys_of( shift, 1 ),
+        { pretty => $PrettyPrinting, indent => 2 }
+    );
+}
+
+sub hash_to_atom :Export {
+    return xml_to_atom( hash_to_xml(shift) );
+}
+
+*hash_to_hash = \&_alleviate_array;
 
 1; # Magic true value required at end of module
 __END__
@@ -243,23 +280,22 @@ Google::Data::JSON - XML-JSON converter based on Google Data APIs
 
 =head1 SYNOPSIS
 
-    use Google::Data::JSON;
+    use Google::Data::JSON qw( gdata add_elements );
 
     ## Convert an XML feed into a JSON feed.
     $parser = Google::Data::JSON->new($xml);
     print $parser->as_json;
 
-    ## XML elements, which are not Atom standards, should be added into 
-    ## the array, before converting to an XML feed or an XML::Atom 
-    ## object.
-    push @Google::Data::JSON::Elements, qw( div p i gd:when gd:where );
+    ## XML elements, which are not Atom/GData standards, should be
+    ## added into the array by using Google::Data::JSON::add_elements,
+    ## before converting to an XML feed or an XML::Atom object.
+    add_elements( qw( div p i ex:tag ) );
 
     ## Convert a JSON feed into an XML feed.
-    $parser = Google::Data::JSON->new($json);
-    print $parser->as_xml;
+    print Google::Data::JSON->new($json)->as_xml;
 
-    ## Convert an XML::Atom object into a JSON feed.
-    print $parser->set($atom)->as_json;
+    ## gdata() is a shortcut for Google::Data::JSON->new()
+    print gdata($atom)->as_json;
 
 =head1 DESCRIPTION
 
@@ -296,7 +332,7 @@ using "$". For example, ns:element becomes ns$element.
 encoding of the root element, respectively.
 
 
-=head1 USAGE
+=head1 METHODS
 
 =head2 new($stream)
 
@@ -321,24 +357,24 @@ A string containing XML or JSON.
 An XML::Atom object, such as XML::Atom::Feed, XML::Atom::Entry, 
 XML::Atom::Service, and XML::Atom::Categories.
 
-=item A perl object
+=item A Perl hash
 
-A perl object, that is reference to a data structure, like HASH and ARRAY.
+A Perl hash, strictly saying, that is a reference to a data structure, like
+HASH and ARRAY.
 
 =back
 
-=head2 set($stream)
+=head2 gdata($stream)
 
-Sets new stream I<$stream>, such as XML and JSON,
-and returns I<$self>.
+Shortcut for Google::Data::JSON->new() .
 
 =head2 as_xml
 
 Converts into a string of XML.
 
-XML elements, which are not Atom standards, should be added into the array 
-@Google::Data::JSON::Elements, before converting to an XML feed or an 
-XML::Atom object.
+XML elements, which are not Atom/GData standards, should be added into the
+array by using Google::Data::JSON::add_elements, before converting to an XML
+feed or an XML::Atom object.
 
 =head2 as_json
 
@@ -348,55 +384,69 @@ Converts into a string of JSON.
 
 Converts into an XML::Atom object.
 
-XML elements, which are not Atom standards, should be added into the array 
-@Google::Data::JSON::Elements, before converting to an XML feed or an 
-XML::Atom object.
+XML elements, which are not Atom/GData standards, should be added into the
+array by using Google::Data::JSON::add_elements, before converting to an XML
+feed or an XML::Atom object.
 
-=head2 as_obj
+=head2 as_hash
 
-Converts into a perl object.
+Converts into a Perl hash.
+
+=head2 add_elements(@elements)
+
+Adds a list of elements name, which are recognized as XML elements not
+attributes in converting.
+
+=head2 get_elements
+
+Returns a list of elements name, which are recognized as XML elements not
+attributes in converting.
 
 =head2 xml_to_json($xml)
 
 =head2 xml_to_atom($xml)
 
-=head2 xml_to_obj($xml)
+=head2 xml_to_hash($xml)
 
 =head2 json_to_xml($json)
 
 =head2 json_to_atom($json)
 
-=head2 json_to_obj($json)
+=head2 json_to_hash($json)
 
 =head2 atom_to_xml($atom)
 
 =head2 atom_to_json($atom)
 
-=head2 atom_to_obj($atom)
+=head2 atom_to_hash($atom)
 
-=head2 obj_to_xml($obj)
+=head2 hash_to_xml($hash)
 
-=head2 obj_to_json($obj)
+=head2 hash_to_json($hash)
 
-=head2 obj_to_atom($obj)
+=head2 hash_to_atom($hash)
 
-=head2 _type
+=head2 hash_to_hash($hash)
 
-=head2 _fix_keys
+Extracts array references that have just one element.
+
+=head2 _type_of
 
 =head2 _is_element
 
+=head2 _fix_keys_of
+
 =head2 _force_array
 
+=head2 _alleviate_array
 
 =head1 EXPORT
 
 None by default.
 
-
 =head1 EXAMPLE OF FEEDS
 
-The following example shows XML, JSON and perl object versions of the 
+The following example shows XML, JSON and Perl hash versions of the 
 same feed:
 
 =head2 XML feed
@@ -478,7 +528,7 @@ same feed:
 	  },
 	}
 
-=head2 perl object
+=head2 Perl hash
 
 	$VAR1 = {
 	  'version' => '1.0',
@@ -527,21 +577,18 @@ same feed:
 	    'title' => 'dive into mark'
 	  },
 	};
-	
 
 =head1 SEE ALSO
 
 L<XML::Atom>
 
-
 =head1 AUTHOR
 
-Takeru INOUE  C<< <takeru.inoue@gmail.com> >>
-
+Takeru INOUE  C<< <takeru.inoue _ gmail.com> >>
 
 =head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 2007, Takeru INOUE C<< <takeru.inoue@gmail.com> >>. All rights reserved.
+Copyright (c) 2007, Takeru INOUE C<< <takeru.inoue _ gmail.com> >>. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
@@ -569,3 +616,5 @@ RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
 FAILURE OF THE SOFTWARE TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
 SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
 SUCH DAMAGES.
+
+=cut

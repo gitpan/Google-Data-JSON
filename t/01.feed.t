@@ -3,32 +3,30 @@
 use strict;
 use warnings;
 use Test::More 'no_plan';
-use Path::Class;
+use File::Slurp;
 use XML::Atom::Feed;
-use Google::Data::JSON;
+use Google::Data::JSON qw( gdata add_elements xml_to_json );
 
-my $parser1 = Google::Data::JSON->new('t/samples/feed.xml');
-isa_ok $parser1, 'Google::Data::JSON';
+my $parser = Google::Data::JSON->new('t/samples/feed.xml');
+isa_ok $parser, 'Google::Data::JSON';
 
-my $json = $parser1->as_json;
-is $json, file('t/samples/feed.json')->slurp;
+my $json = $parser->as_json;
+is $json, read_file('t/samples/feed.json');
 
-push @Google::Data::JSON::Elements, qw( div p i );
+is xml_to_json('t/samples/feed.xml'), $json;
 
-my $parser2 = Google::Data::JSON->new('t/samples/feed.json');
-my $xml = $parser2->as_xml;
+add_elements( qw( div p i ) );
+
+my $xml = gdata('t/samples/feed.json')->as_xml;
 like $xml, qr{<title type="text">dive into mark</title>};
 like $xml, qr{<foaf:homepage rdf:resource="http://www.example.org/blog" />};
 
-my $obj1 = $parser1->set($json)->as_obj;
-my $obj2 = $parser2->set($xml)->as_obj;
-is_deeply $obj1, $obj2;
+my $hash1 = gdata($json)->as_hash;
+my $hash2 = gdata($xml)->as_hash;
+is_deeply $hash1, $hash2;
 
-my $atom = $parser1->set($obj1)->as_atom;
+my $atom = gdata($hash1)->as_atom;
 isa_ok $atom, 'XML::Atom::Feed';
 is $atom->id, 'tag:example.org,2003:3';
 my @entry = $atom->entries;
 like $entry[0]->content->body, qr{<p>\s*<i>\[Update: The Atom draft is finished\.\]</i>\s*</p>};
-
-$obj1 = $parser2->set($atom)->as_obj;
-is_deeply $obj1, $obj2;
