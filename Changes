@@ -1,3 +1,9 @@
+2007-03-04  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.0.3:
+	* Google/Data/JSON.pm:
+	- renamee hash to hashref
+
 2007-03-02  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.0.3:

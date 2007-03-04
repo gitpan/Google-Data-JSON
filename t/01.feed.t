@@ -21,11 +21,11 @@ my $xml = gdata('t/samples/feed.json')->as_xml;
 like $xml, qr{<title type="text">dive into mark</title>};
 like $xml, qr{<foaf:homepage rdf:resource="http://www.example.org/blog" />};
 
-my $hash1 = gdata($json)->as_hash;
-my $hash2 = gdata($xml)->as_hash;
-is_deeply $hash1, $hash2;
+my $hashref1 = gdata($json)->as_hashref;
+my $hashref2 = gdata($xml)->as_hashref;
+is_deeply $hashref1, $hashref2;
 
-my $atom = gdata($hash1)->as_atom;
+my $atom = gdata($hashref1)->as_atom;
 isa_ok $atom, 'XML::Atom::Feed';
 is $atom->id, 'tag:example.org,2003:3';
 my @entry = $atom->entries;

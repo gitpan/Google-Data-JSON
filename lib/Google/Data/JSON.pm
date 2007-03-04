@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.3');
+use version; our $VERSION = qv('0.0.4');
 
 use XML::Simple;
 use JSON;
@@ -55,7 +55,7 @@ sub new {
 
     my $data = do {
 	no strict 'refs'; ## no critic
-         *{ _type_of($stream) . '_to_hash' }->( $stream );
+         *{ _type_of($stream) . '_to_hashref' }->( $stream );
     };
 
     return bless { data => $data }, $class;
@@ -63,10 +63,10 @@ sub new {
 
 sub gdata :Export { __PACKAGE__->new(@_) }
 
-sub as_xml  { hash_to_xml ( shift->{data} ) }
-sub as_json { hash_to_json( shift->{data} ) }
-sub as_atom { hash_to_atom( shift->{data} ) }
-sub as_hash { shift->{data}                }
+sub as_xml     { hashref_to_xml ( shift->{data} ) }
+sub as_json    { hashref_to_json( shift->{data} ) }
+sub as_atom    { hashref_to_atom( shift->{data} ) }
+sub as_hashref {                  shift->{data}   }
 
 sub add_elements :Export {
     croak "This is class method" if ref $_[0];
@@ -91,7 +91,7 @@ sub _type_of {
     }
     else {
         return ref($stream) =~ /\AXML::Atom/ ? 'atom'
-             : ref $stream eq 'HASH'         ? 'hash'
+             : ref $stream eq 'HASH'         ? 'hashref'
              :                                  croak "Bad stream: $stream";
     }
 }
@@ -176,7 +176,7 @@ sub _alleviate_array {
 }
 
 sub xml_to_json :Export {
-    return hash_to_json( xml_to_hash(shift) );
+    return hashref_to_json( xml_to_hashref(shift) );
 }
 
 sub xml_to_atom :Export {
@@ -189,7 +189,7 @@ sub xml_to_atom :Export {
     return $module->new(\$xml);
 }
 
-sub xml_to_hash :Export {
+sub xml_to_hashref :Export {
     my $xml = shift;
 
     $xml = read_file($xml) unless $xml =~ /^<\?xml/;
@@ -216,14 +216,14 @@ sub xml_to_hash :Export {
 }
 
 sub json_to_xml :Export {
-    return hash_to_xml( json_to_hash(shift) );
+    return hashref_to_xml( json_to_hashref(shift) );
 }
 
 sub json_to_atom :Export {
     return xml_to_atom( json_to_xml(shift) );
 }
 
-sub json_to_hash :Export {
+sub json_to_hashref :Export {
     return _fix_keys_of( jsonToObj(shift), 0 );
 }
 
@@ -235,11 +235,11 @@ sub atom_to_json :Export {
     return xml_to_json( atom_to_xml(shift) );
 }
 
-sub atom_to_hash :Export {
-    return xml_to_hash( atom_to_xml(shift) );
+sub atom_to_hashref :Export {
+    return xml_to_hashref( atom_to_xml(shift) );
 }
 
-sub hash_to_xml :Export {
+sub hashref_to_xml :Export {
     my $data = shift;
 
     my $version  = $data->{version}  || 1.0;
@@ -257,25 +257,25 @@ sub hash_to_xml :Export {
     return $xml;
 }
 
-sub hash_to_json :Export {
+sub hashref_to_json :Export {
     return objToJson(
         _fix_keys_of( shift, 1 ),
         { pretty => $PrettyPrinting, indent => 2 }
     );
 }
 
-sub hash_to_atom :Export {
-    return xml_to_atom( hash_to_xml(shift) );
+sub hashref_to_atom :Export {
+    return xml_to_atom( hashref_to_xml(shift) );
 }
 
-*hash_to_hash = \&_alleviate_array;
+*hashref_to_hashref = \&_alleviate_array;
 
 1; # Magic true value required at end of module
 __END__
 
 =head1 NAME
 
-Google::Data::JSON - XML-JSON converter based on Google Data APIs
+Google::Data::JSON - General XML-JSON converter based on Google Data APIs
 
 
 =head1 SYNOPSIS
@@ -357,10 +357,10 @@ A string containing XML or JSON.
 An XML::Atom object, such as XML::Atom::Feed, XML::Atom::Entry, 
 XML::Atom::Service, and XML::Atom::Categories.
 
-=item A Perl hash
+=item A Perl hashref
 
-A Perl hash, strictly saying, that is a reference to a data structure, like
-HASH and ARRAY.
+A Perl hash referece, strictly saying, that is a reference to a data structure
+combined with HASH and ARRAY.
 
 =back
 
@@ -388,9 +388,9 @@ XML elements, which are not Atom/GData standards, should be added into the
 array by using Google::Data::JSON::add_elements, before converting to an XML
 feed or an XML::Atom object.
 
-=head2 as_hash
+=head2 as_hashref
 
-Converts into a Perl hash.
+Converts into a Perl hash reference.
 
 =head2 add_elements(@elements)
 
@@ -406,27 +406,27 @@ attributes in converting.
 
 =head2 xml_to_atom($xml)
 
-=head2 xml_to_hash($xml)
+=head2 xml_to_hashref($xml)
 
 =head2 json_to_xml($json)
 
 =head2 json_to_atom($json)
 
-=head2 json_to_hash($json)
+=head2 json_to_hashref($json)
 
 =head2 atom_to_xml($atom)
 
 =head2 atom_to_json($atom)
 
-=head2 atom_to_hash($atom)
+=head2 atom_to_hashref($atom)
 
-=head2 hash_to_xml($hash)
+=head2 hashref_to_xml($hashref)
 
-=head2 hash_to_json($hash)
+=head2 hashref_to_json($hashref)
 
-=head2 hash_to_atom($hash)
+=head2 hashref_to_atom($hashref)
 
-=head2 hash_to_hash($hash)
+=head2 hashref_to_hashref($hashref)
 
 Extracts array references that have just one element.
 
@@ -446,7 +446,7 @@ None by default.
 
 =head1 EXAMPLE OF FEEDS
 
-The following example shows XML, JSON and Perl hash versions of the 
+The following example shows XML, JSON and Perl hash reference versions of the
 same feed:
 
 =head2 XML feed
@@ -528,7 +528,7 @@ same feed:
 	  },
 	}
 
-=head2 Perl hash
+=head2 Perl hash reference
 
 	$VAR1 = {
 	  'version' => '1.0',

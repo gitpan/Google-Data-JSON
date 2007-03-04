@@ -8,7 +8,7 @@ use Google::Data::JSON qw( gdata add_elements );
 
 add_elements( qw( ex:tag ) );
 
-my $hash = {
+my $hashref = {
     entry => {
 	'xmlns:ex' => 'http://example.com/',
 	title => 'My Entry',
@@ -25,5 +25,5 @@ my $hash = {
     },
 };
 
-my $xml = gdata($hash)->as_xml;
+my $xml = gdata($hashref)->as_xml;
 is $xml, read_file('t/samples/entry.xml');
