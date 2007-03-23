@@ -4,10 +4,10 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.4');
+use version; our $VERSION = qv('0.0.5');
 
 use XML::Simple;
-use JSON;
+use JSON::Syck;
 use List::MoreUtils qw( any uniq );
 use File::Slurp;
 use Perl6::Export::Attrs;
@@ -224,7 +224,7 @@ sub json_to_atom :Export {
 }
 
 sub json_to_hashref :Export {
-    return _fix_keys_of( jsonToObj(shift), 0 );
+    return _fix_keys_of( JSON::Syck::Load(shift), 0 );
 }
 
 sub atom_to_xml :Export {
@@ -258,10 +258,7 @@ sub hashref_to_xml :Export {
 }
 
 sub hashref_to_json :Export {
-    return objToJson(
-        _fix_keys_of( shift, 1 ),
-        { pretty => $PrettyPrinting, indent => 2 }
-    );
+    return JSON::Syck::Dump( _fix_keys_of( shift, 1 ) );
 }
 
 sub hashref_to_atom :Export {

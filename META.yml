@@ -1,6 +1,6 @@
 ---
 name: Google-Data-JSON
-version: v0.0.4
+version: v0.0.5
 author:
   - 'Takeru INOUE <takeru.inoue _ gmail.com>'
 abstract: General XML-JSON converter based on Google Data APIs
@@ -9,7 +9,7 @@ resources:
   license: http://dev.perl.org/licenses/
 requires:
   File::Slurp: 0
-  JSON: 0
+  JSON::Syck: 0
   List::MoreUtils: 0
   Perl6::Export::Attrs: 0
   Test::More: 0
@@ -22,7 +22,7 @@ requires:
 provides:
   Google::Data::JSON:
     file: lib/Google/Data/JSON.pm
-    version: v0.0.4
+    version: v0.0.5
 generated_by: Module::Build version 0.2806
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
