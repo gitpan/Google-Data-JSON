@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.5');
+use version; our $VERSION = qv('0.0.6');
 
 use XML::Simple;
 use JSON::Syck;
@@ -14,11 +14,7 @@ use Perl6::Export::Attrs;
 use UNIVERSAL::require;
 
 # XML::Simple
-our $ContentKey     = '$t';
-
-# JSON
-our $PrettyPrinting = 0;
-$JSON::AUTOCONVERT  = 0;
+our $ContentKey = '$t';
 
 my @atom_elements = qw(
     author category content contributor email entry feed generator icon id link
@@ -242,7 +238,7 @@ sub atom_to_hashref :Export {
 sub hashref_to_xml :Export {
     my $data = shift;
 
-    my $version  = $data->{version}  || 1.0;
+    my $version  = $data->{version}  || '1.0';
     my $encoding = $data->{encoding} || 'utf-8';
     delete $data->{version};
     delete $data->{encoding};

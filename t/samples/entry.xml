@@ -1,4 +1,4 @@
-<?xml version="1" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <entry xmlns:ex="http://example.com/">
   <id>tag:example.org,2007:2</id>
   <category scheme="http://example.com/" term="hello" />

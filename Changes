@@ -1,3 +1,9 @@
+2007-06-10  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.0.6:
+	* Google/Data/JSON.pm:
+	- change XML version as string ('1.0')
+
 2007-03-23  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.0.5:
@@ -8,7 +14,7 @@
 
 	* release 0.0.4:
 	* Google/Data/JSON.pm:
-	- renamee hash to hashref
+	- rename hash to hashref
 
 2007-03-02  Takeru INOUE  <takeru.inoue _ gmail.com>
 
