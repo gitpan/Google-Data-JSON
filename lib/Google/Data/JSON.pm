@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.6');
+use version; our $VERSION = qv('0.0.7');
 
 use XML::Simple;
 use JSON::Syck;
@@ -203,6 +203,7 @@ sub xml_to_hashref :Export {
         KeepRoot   => 1,
         ForceArray => 0,
         ContentKey => $ContentKey,
+	KeyAttr    => {},
     );
 
     $data->{version}  = $version  if defined $version;

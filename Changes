@@ -1,3 +1,11 @@
+2007-07-04  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.0.7:
+	* Google/Data/JSON.pm:
+	- add an argument ( KeyAttr => {} ) to XMLin, to avoid that
+	  element <id>'s are understood as identities of thier parent
+	  elements
+
 2007-06-10  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.0.6:

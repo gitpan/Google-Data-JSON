@@ -1,6 +1,6 @@
 ---
 name: Google-Data-JSON
-version: v0.0.6
+version: 0.0.7
 author:
   - 'Takeru INOUE <takeru.inoue _ gmail.com>'
 abstract: General XML-JSON converter based on Google Data APIs
@@ -22,8 +22,8 @@ requires:
 provides:
   Google::Data::JSON:
     file: lib/Google/Data/JSON.pm
-    version: v0.0.6
-generated_by: Module::Build version 0.2806
+    version: 0.0.7
+generated_by: Module::Build version 0.2808
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
   version: 1.2
