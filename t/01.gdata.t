@@ -15,29 +15,27 @@ my @entries = $atom->entries;
 is $entries[0]->title, 'Test Entry 1';
 is $entries[1]->title, 'Test Entry 2';
 
-my $hash = $gdata->as_hash;
+my $hash = gdata('t/samples/feed.atom')->as_hash;
 is $hash->{feed}{title}{'$t'}, 'Test Feed';
 is $hash->{feed}{entry}[0]{title}{'$t'}, 'Test Entry 1';
 is $hash->{feed}{entry}[1]{title}{'$t'}, 'Test Entry 2';
 
-my $json = $gdata->as_json;
+my $json = gdata('t/samples/feed.atom')->as_json;
 like $json, qr{"title":\{"\$t":"Test Feed"\}};
 like $json, qr{"title":\{"\$t":"Test Entry 1"\}};
 like $json, qr{"title":\{"\$t":"Test Entry 2"\}};
 
-$gdata = gdata('t/samples/feed.json');
-
-$hash = $gdata->as_hash;
+$hash = gdata('t/samples/feed.json')->as_hash;
 is $hash->{feed}{title}{'$t'}, 'Test Feed';
 is $hash->{feed}{entry}[0]{title}{'$t'}, 'Test Entry 1';
 is $hash->{feed}{entry}[1]{title}{'$t'}, 'Test Entry 2';
 
-my $xml = $gdata->as_xml;
+my $xml = gdata('t/samples/feed.json')->as_xml;
 like $xml, qr{<title>Test Feed</title>};
 like $xml, qr{<title>Test Entry 1</title>};
 like $xml, qr{<title>Test Entry 1</title>};
 
-$atom = $gdata->as_atom;
+$atom = gdata('t/samples/feed.json')->as_atom;
 TODO: { 
     local $TODO = 'XML::Atom has a bug?';
     is $atom->title, 'Test Feed';

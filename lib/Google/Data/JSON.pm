@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.1.0');
+use version; our $VERSION = qv('0.1.1');
 
 use XML::Simple;
 use JSON::Syck;
@@ -77,7 +77,7 @@ sub as_atom {
     elsif ( $self->{json} ) {
 	$self->{hash} = json_to_hash( $self->{json} );
 	$self->{xml} = hash_to_xml( $self->{hash} );
-	return $self->{atom} = xml_to_atom( $self->{atom} );
+	return $self->{atom} = xml_to_atom( $self->{xml} );
     }
 }
 
