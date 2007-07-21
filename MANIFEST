@@ -6,11 +6,9 @@ Makefile.PL
 README
 lib/Google/Data/JSON.pm
 t/00.load.t
-t/01.feed.t
-t/02.entry.t
+t/01.gdata.t
 t/perlcritic.t
 t/pod-coverage.t
 t/pod.t
-t/samples/entry.xml
-t/samples/feed.xml
+t/samples/feed.atom
 t/samples/feed.json

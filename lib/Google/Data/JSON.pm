@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.7');
+use version; our $VERSION = qv('0.1.0');
 
 use XML::Simple;
 use JSON::Syck;
@@ -13,256 +13,159 @@ use File::Slurp;
 use Perl6::Export::Attrs;
 use UNIVERSAL::require;
 
-# XML::Simple
-our $ContentKey = '$t';
-
-my @atom_elements = qw(
-    author category content contributor email entry feed generator icon id link
-    logo name published rights source subtitle summary title updated uri
-);
-
-my @app_elements = qw(
-    accept categories collection service workspace
-);
-
-my @gd_elements = qw(
-    attendeeStatus attendeeType comments contactSection email entryLink 
-    feedLink geoPt im originalEvent phoneNumber postalAddress rating recurrence
-     recurrenceException reminder when where who
-);
-
-my @opensearch_elements = qw(
-    totalResults startIndex itemsPerPage
-);
-
-@atom_elements         = map { ( $_, "atom:$_"         ) } @atom_elements;
-@app_elements          = map { ( $_, "app:$_"          ) } @app_elements;
-@gd_elements           = map { ( $_, "gd:$_"           ) } @gd_elements;
-@opensearch_elements   = map { ( $_, "openSearch:$_"   ) } @opensearch_elements;
-
-my @Elements
-    = ( @atom_elements, @app_elements, @gd_elements, @opensearch_elements );
+## XML::Simple
+my $CONFIG = {
+    XMLin => {
+	KeepRoot     => 1,
+	ContentKey   => '$t',
+	KeyAttr      => [],
+	ForceArray   => 0,
+	ForceContent => 1,
+    },
+    XMLout => {
+	KeepRoot     => 1,
+	ContentKey   => '$t',
+	KeyAttr      => [],
+	XMLDecl      => '<?xml version="1.0" encoding="utf-8"?>',
+	NoSort       => 1,
+    }
+};
 
 sub new {
     my $class  = shift;
-    my $stream = shift;
-
-    $stream = read_file($stream) if $stream !~ /[\r\n]/ && -f $stream;
-
-    my $data = do {
-	no strict 'refs'; ## no critic
-         *{ _type_of($stream) . '_to_hashref' }->( $stream );
-    };
-
-    return bless { data => $data }, $class;
+    my ($stream) = @_;
+    $stream = read_file $stream if $stream !~ /[\r\n]/ && -f $stream;
+    my $type = ref $stream =~ /^XML::Atom/ ? 'atom'
+	     : ref $stream eq 'HASH'       ? 'hash'
+	     :     $stream =~ /^<\?xml/    ? 'xml'
+	     :     $stream =~ /^\{/        ? 'json'
+	     :                               croak "Bad stream: $stream" ;
+    bless { $type => $stream }, $class;
 }
 
 sub gdata :Export { __PACKAGE__->new(@_) }
 
-sub as_xml     { hashref_to_xml ( shift->{data} ) }
-sub as_json    { hashref_to_json( shift->{data} ) }
-sub as_atom    { hashref_to_atom( shift->{data} ) }
-sub as_hashref {                  shift->{data}   }
-
-sub add_elements :Export {
-    croak "This is class method" if ref $_[0];
-
-    push @Elements, @_;
-    return @Elements = uniq @Elements;
-}
-
-sub get_elements :Export {
-    croak "This is class method" if ref $_[0];
-
-    return @Elements;
-}
-
-sub _type_of {
-    my $stream = shift;
-
-    if (not ref $stream) {
-        return $stream =~ /\A </xms  ? 'xml'
-             : $stream =~ /\A \{/xms ? 'json'
-             :                          croak "Bad stream: $stream" ;
+sub as_xml {
+    my $self = shift;
+    if ( $self->{xml} ) {
+	return $self->{xml};
     }
-    else {
-        return ref($stream) =~ /\AXML::Atom/ ? 'atom'
-             : ref $stream eq 'HASH'         ? 'hashref'
-             :                                  croak "Bad stream: $stream";
+    elsif ( $self->{atom} ) {
+	return $self->{xml} = atom_to_xml( $self->{atom} );
+    }
+    elsif ( $self->{hash} ) {
+	return $self->{xml} = hash_to_xml( $self->{hash} );
+    }
+    elsif ( $self->{json} ) {
+	$self->{hash} = json_to_hash( $self->{json} );
+	return $self->{xml} = hash_to_xml( $self->{hash} );
     }
 }
 
-sub _is_element {
-    my ($key) = @_;
-
-    my %is_element = map { ($_ => 1) } @Elements;
-    return $is_element{$key};
+sub as_atom {
+    my $self = shift;
+    if ( $self->{atom} ) {
+	return $self->{atom};
+    }
+    elsif ( $self->{xml} ) {
+	return $self->{atom} = xml_to_atom( $self->{xml} );
+    }
+    elsif ( $self->{hash} ) {
+	$self->{xml} = hash_to_xml( $self->{hash} );
+	return $self->{atom} = xml_to_atom( $self->{xml} );
+    }
+    elsif ( $self->{json} ) {
+	$self->{hash} = json_to_hash( $self->{json} );
+	$self->{xml} = hash_to_xml( $self->{hash} );
+	return $self->{atom} = xml_to_atom( $self->{atom} );
+    }
 }
 
-sub _fix_keys_of {
-    my ($data, $converting_to_json) = @_;
-
-    my ($from, $to) = $converting_to_json ? (':',  '$')
-                    :                       ('\$', ':') ;
-
-    if (ref $data eq 'HASH') {
-	for my $key (keys(%{ $data })) {
-	    if ($key =~ m{\A [^$from]+ $from .+ \z}xms) {
-		my $original = $key;
-		$key =~ s{$from}{$to};
-		$data->{$key} = $data->{$original};
-		delete $data->{$original};
-	    }
-
-	    $data->{$key} = _fix_keys_of( $data->{$key}, $converting_to_json )
-		if ref $data->{$key};
-	}
+sub as_hash {
+    my $self = shift;
+    if ( $self->{hash} ) {
+	return $self->{hash};
     }
-    elsif (ref $data eq 'ARRAY') {
-	for my $element (@{ $data }) {
-	    $element = _fix_keys_of( $element, $converting_to_json )
-		if ref $element eq 'HASH';
-	}
+    elsif ( $self->{json} ) {
+	return $self->{hash} = json_to_hash( $self->{json} );
     }
-
-    return $data;
+    elsif ( $self->{xml} ) {
+	return $self->{hash} = xml_to_hash( $self->{xml} );
+    }
+    elsif ( $self->{atom} ) {
+	$self->{xml} = atom_to_xml( $self->{atom} );
+	return $self->{hash} = xml_to_hash( $self->{xml} );
+    }
 }
 
-sub _force_array {
-    my ($data) = @_;
-
-    if (ref $data eq 'HASH') {
-	for my $key ( keys(%{ $data }) ) {
-	    $data->{$key} = _force_array($data->{$key}) if ref $data->{$key};
-
-	    if (ref $data->{$key} ne 'ARRAY' && _is_element($key)) {
-		$data->{$key} = [ $data->{$key} ];
-	    }
-	}
+sub as_json {
+    my $self = shift;
+    if ( $self->{json} ) {
+	return $self->{json};
     }
-    elsif (ref $data eq 'ARRAY') {
-	for my $element (@{ $data }) {
-	    $element = _force_array($element) if ref $element eq 'HASH';
-	}
+    elsif ( $self->{hash} ) {
+	return $self->{json} = hash_to_json( $self->{hash} );
     }
-
-    return $data;
+    elsif ( $self->{xml} ) {
+	$self->{hash} = xml_to_hash( $self->{xml} );
+	return $self->{json} = hash_to_json( $self->{hash} );
+    }
+    elsif ( $self->{atom} ) {
+	$self->{xml} = atom_to_xml( $self->{atom} );
+	$self->{hash} = xml_to_hash( $self->{xml} );
+	return $self->{json} = hash_to_json( $self->{hash} );
+    }
 }
 
-sub _alleviate_array {
-    my ($data) = @_;
-
-    if (ref $data eq 'HASH') {
-	for my $key ( keys(%{ $data }) ) {
-	    $data->{$key} = _alleviate_array($data->{$key}) if ref $data->{$key};
-	}
-    }
-    elsif (ref $data eq 'ARRAY') {
-	if (ref $data eq 'ARRAY' && @{ $data } == 1) {
-	    $data = _alleviate_array($data->[0]);
-	}
-	else {
-	    for my $element (@{ $data }) {
-		$element = _alleviate_array($element) if ref $element eq 'HASH';
-	    }
-	}
-    }
-
-    return $data;
-}
-
-sub xml_to_json :Export {
-    return hashref_to_json( xml_to_hashref(shift) );
-}
-
-sub xml_to_atom :Export {
-    my $xml    = shift;
-
-    my ($root) = $xml =~ /<\?xml [^>]+? \?> \s*? <(\w+) /xms;
+sub xml_to_atom :Export { 
+    my ($xml) = shift;
+    my ($root) = $xml =~ /<\?xml[^>]+?\?>\s*<(?:\w+:)?(\w+)/ms;
     my $module = 'XML::Atom::' . ucfirst($root);
-    $module->require || croak $@;
-
+    "$module"->require || croak $@;
     return $module->new(\$xml);
 }
 
+sub xml_to_hash :Export { XMLin( $_[0], %{ $CONFIG->{XMLin} } ) }
+
+sub xml_to_json :Export { hash_to_json( xml_to_hash(@_) ) }
+
+sub atom_to_xml :Export { $_[0]->as_xml }
+
+sub atom_to_hash :Export { xml_to_hash( atom_to_xml(@_) ) }
+
+sub atom_to_json :Export { xml_to_json( atom_to_xml(@_) ) }
+
+sub hash_to_xml :Export { XMLout( $_[0], %{ $CONFIG->{XMLout} } ) }
+
+sub hash_to_atom :Export { xml_to_atom( hash_to_xml(@_) ) }
+
+sub hash_to_json :Export { JSON::Syck::Dump( $_[0] ) }
+
+sub json_to_xml :Export { hash_to_xml( json_to_hash(@_) ) }
+
+sub json_to_atom :Export { hash_to_atom( json_to_hash(@_) ) }
+
+sub json_to_hash :Export { JSON::Syck::Load( $_[0] ) }
+
+sub as_hashref {
+    warn 'as_hashref is DEPRECATED and renamed to as_hash';
+    $_[0]->as_hash;
+}
+
 sub xml_to_hashref :Export {
-    my $xml = shift;
-
-    $xml = read_file($xml) unless $xml =~ /^<\?xml/;
-
-    $xml =~ m{^
-                <\? xml [^>]+?
-                    version=["']([\d\.]+)["'] [^>]+?      #'
-                    (?:encoding=["']([^"']+)["'])? [^>]*? #"
-                \?>
-             }xms;
-    my ($version, $encoding) = ($1, $2);
-
-    my $data = XMLin(
-        $xml,
-        KeepRoot   => 1,
-        ForceArray => 0,
-        ContentKey => $ContentKey,
-	KeyAttr    => {},
-    );
-
-    $data->{version}  = $version  if defined $version;
-    $data->{encoding} = $encoding if defined $encoding;
-
-    return $data;
-}
-
-sub json_to_xml :Export {
-    return hashref_to_xml( json_to_hashref(shift) );
-}
-
-sub json_to_atom :Export {
-    return xml_to_atom( json_to_xml(shift) );
-}
-
-sub json_to_hashref :Export {
-    return _fix_keys_of( JSON::Syck::Load(shift), 0 );
-}
-
-sub atom_to_xml :Export {
-    return shift->as_xml;
-}
-
-sub atom_to_json :Export {
-    return xml_to_json( atom_to_xml(shift) );
+    warn 'xml_to_hashref is DEPRECATED and renamed to xml_to_hash';
+    xml_to_hash(@_);
 }
 
 sub atom_to_hashref :Export {
-    return xml_to_hashref( atom_to_xml(shift) );
+    warn 'xml_to_hashref is DEPRECATED and renamed to atom_to_hash';
+    atom_to_hash(@_);
 }
 
-sub hashref_to_xml :Export {
-    my $data = shift;
-
-    my $version  = $data->{version}  || '1.0';
-    my $encoding = $data->{encoding} || 'utf-8';
-    delete $data->{version};
-    delete $data->{encoding};
-
-    $data = _force_array($data);
-
-    my $xml = "<?xml version=\"$version\" encoding=\"$encoding\"?>\n"
-        . XMLout($data, KeepRoot => 1, ContentKey => $ContentKey);
-
-    $data = _alleviate_array($data);
-
-    return $xml;
+sub json_to_hashref :Export {
+    warn 'xml_to_hashref is DEPRECATED and renamed to json_to_hash';
+    json_to_hash(@_);
 }
-
-sub hashref_to_json :Export {
-    return JSON::Syck::Dump( _fix_keys_of( shift, 1 ) );
-}
-
-sub hashref_to_atom :Export {
-    return xml_to_atom( hashref_to_xml(shift) );
-}
-
-*hashref_to_hashref = \&_alleviate_array;
 
 1; # Magic true value required at end of module
 __END__
@@ -274,22 +177,19 @@ Google::Data::JSON - General XML-JSON converter based on Google Data APIs
 
 =head1 SYNOPSIS
 
-    use Google::Data::JSON qw( gdata add_elements );
+    use Google::Data::JSON qw( gdata );
 
-    ## Convert an XML feed into a JSON feed.
-    $parser = Google::Data::JSON->new($xml);
-    print $parser->as_json;
+    ## Convert an XML document into a JSON.
+    $json = gdata($xml)->as_json;
 
-    ## XML elements, which are not Atom/GData standards, should be
-    ## added into the array by using Google::Data::JSON::add_elements,
-    ## before converting to an XML feed or an XML::Atom object.
-    add_elements( qw( div p i ex:tag ) );
+    ## Convert an XML document into a Perl HASH.
+    $hash = gdata($xml)->as_hash;
 
-    ## Convert a JSON feed into an XML feed.
-    print Google::Data::JSON->new($json)->as_xml;
+    ## Convert a JSON into an XML document.
+    $xml = $gdata($json)->as_xml;
 
-    ## gdata() is a shortcut for Google::Data::JSON->new()
-    print gdata($atom)->as_json;
+    ## Convert a JSON into an Atom object.
+    $atom = $gdata($json)->as_atom;
 
 =head1 DESCRIPTION
 
@@ -297,8 +197,8 @@ B<Google::Data::JSON> provides several methods to convert an XML feed
 into a JSON feed, and vice versa. The JSON format is defined in Google 
 Data APIs, http://code.google.com/apis/gdata/json.html .
 
-This module is not restricted to the Google Data APIs.
-Any XML documents can be converted into JSON-format.
+This module is not restricted to Atom Feed.
+Any XML documents can be converted into JSON-format, and vice versa.
 
 The following rules are described in Google Data APIs:
 
@@ -328,7 +228,7 @@ encoding of the root element, respectively.
 
 =head1 METHODS
 
-=head2 new($stream)
+=head2 Google::Data::JSON->new($stream)
 
 Creates a new parser object from I<$stream>, such as XML and JSON,
 and returns the new Google::Data::JSON object.
@@ -351,7 +251,7 @@ A string containing XML or JSON.
 An XML::Atom object, such as XML::Atom::Feed, XML::Atom::Entry, 
 XML::Atom::Service, and XML::Atom::Categories.
 
-=item A Perl hashref
+=item A Perl HASH
 
 A Perl hash referece, strictly saying, that is a reference to a data structure
 combined with HASH and ARRAY.
@@ -362,215 +262,218 @@ combined with HASH and ARRAY.
 
 Shortcut for Google::Data::JSON->new() .
 
-=head2 as_xml
+=head2 $gdata->as_xml
 
 Converts into a string of XML.
 
-XML elements, which are not Atom/GData standards, should be added into the
-array by using Google::Data::JSON::add_elements, before converting to an XML
-feed or an XML::Atom object.
-
-=head2 as_json
+=head2 $gdata->as_json
 
 Converts into a string of JSON.
 
-=head2 as_atom
+=head2 $gdata->as_atom
 
 Converts into an XML::Atom object.
 
-XML elements, which are not Atom/GData standards, should be added into the
-array by using Google::Data::JSON::add_elements, before converting to an XML
-feed or an XML::Atom object.
+=head2 $gdata->as_hash
 
-=head2 as_hashref
+Converts into a Perl HASH.
 
-Converts into a Perl hash reference.
+=head2 $gdata->as_hashref
 
-=head2 add_elements(@elements)
-
-Adds a list of elements name, which are recognized as XML elements not
-attributes in converting.
-
-=head2 get_elements
-
-Returns a list of elements name, which are recognized as XML elements not
-attributes in converting.
+DEPRECATED
 
 =head2 xml_to_json($xml)
 
 =head2 xml_to_atom($xml)
 
-=head2 xml_to_hashref($xml)
+=head2 xml_to_hash($xml)
 
 =head2 json_to_xml($json)
 
 =head2 json_to_atom($json)
 
-=head2 json_to_hashref($json)
+=head2 json_to_hash($json)
 
 =head2 atom_to_xml($atom)
 
 =head2 atom_to_json($atom)
 
-=head2 atom_to_hashref($atom)
+=head2 atom_to_hash($atom)
 
-=head2 hashref_to_xml($hashref)
+=head2 hash_to_xml($hash)
 
-=head2 hashref_to_json($hashref)
+=head2 hash_to_json($hash)
 
-=head2 hashref_to_atom($hashref)
+=head2 hash_to_atom($hash)
 
-=head2 hashref_to_hashref($hashref)
+=head2 atom_to_hashref
 
-Extracts array references that have just one element.
+DEPRECATED
 
-=head2 _type_of
+=head2 json_to_hashref
 
-=head2 _is_element
+DEPRECATED
 
-=head2 _fix_keys_of
+=head2 xml_to_hashref
 
-=head2 _force_array
-
-=head2 _alleviate_array
+DEPRECATED
 
 =head1 EXPORT
 
 None by default.
 
-=head1 EXAMPLE OF FEEDS
+=head1 EXAMPLE OF XML and JSON
 
-The following example shows XML, JSON and Perl hash reference versions of the
-same feed:
+The following example shows XML and JSON versions of the same document:
 
-=head2 XML feed
+=head2 XML
 
-	<?xml version="1.0" encoding="utf-8"?>
-	<feed xmlns="http://www.w3.org/2005/Atom">
-	  <title>dive into mark</title>
-	  <id>tag:example.org,2003:3</id>
-	  <updated>2005-07-31T12:29:29Z</updated>
-	  <link rel="alternate" type="text/html"
-	   hreflang="en" href="http://example.org/"/>
-	  <link rel="self" type="application/atom+xml"
-	   href="http://example.org/feed.atom"/>
-	  <entry>
-	    <title>Atom draft-07 snapshot</title>
-	    <id>tag:example.org,2003:3.2397</id>
-	    <updated>2005-07-31T12:29:29Z</updated>
-	    <published>2003-12-13T08:29:29-04:00</published>
-	    <link rel="alternate" type="text/html"
-	     href="http://example.org/2005/04/02/atom"/>
-	    <author>
-	      <name>Mark Pilgrim</name>
-	    </author>
-	    <content type="xhtml" xml:lang="en">
-	      <div xmlns="http://www.w3.org/1999/xhtml">
-	        <p><i>[Update: The Atom draft is finished.]</i></p>
-	      </div>
-	    </content>
-	  </entry>
-	</feed>
+    <?xml version="1.0" encoding="utf-8"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <title>Test Feed</title>
+      <id>tag:example.com,2007:1</id>
+      <updated>2007-01-01T00:00:00Z</updated>
+      <link rel="self" href="http://example.com/feed.atom"/>
+      <entry>
+        <title>Test Entry 1</title>
+        <id>tag:example.com,2007:2</id>
+        <updated>2007-02-01T00:00:00Z</updated>
+        <published>2007-02-01T00:00:00Z</published>
+        <link rel="alternate" href="http://example.com/1"/>
+        <link rel="edit" href="http://example.com/edit/1"/>
+        <author>
+          <name>Foo</name>
+          <email>foo@example.com</email>
+        </author>
+        <content type="xhtml">
+          <div xmlns="http://www.w3.org/1999/xhtml">
+            <span>Test 1</span>
+          </div>
+        </content>
+      </entry>
+      <entry>
+        <title>Test Entry 2</title>
+        <id>tag:example.com,2007:3</id>
+        <updated>2007-03-01T00:00:00Z</updated>
+        <published>2007-03-01T00:00:00Z</published>
+        <link rel="alternate" href="http://example.com/2"/>
+        <link rel="edit" href="http://example.com/edit/2"/>
+        <author>
+          <name>Bar</name>
+          <email>bar@example.com</email>
+        </author>
+        <content type="xhtml">
+          <div xmlns="http://www.w3.org/1999/xhtml">
+            <span>Test 2</span>
+          </div>
+        </content>
+      </entry>
+    </feed>
 
-=head2 JSON feed
+=head2 JSON
 
-	{
-	  "version" : "1.0",
-	  "encoding" : "utf-8"
-	  "feed" : {
-	    "xmlns" : "http://www.w3.org/2005/Atom",
-	    "link" : [
-	      {
-	        "rel" : "alternate",
-	        "href" : "http://example.org/",
-	        "type" : "text/html",
-	        "hreflang" : "en"
-	      },
-	      {
-	        "rel" : "self",
-	        "href" : "http://example.org/feed.atom",
-	        "type" : "application/atom+xml"
-	      }
-	    ],
-	    "entry" : {
-	      "link" : {
-	        "rel" : "alternate",
-	        "href" : "http://example.org/2005/04/02/atom",
-	        "type" : "text/html"
-	      },
-	      "published" : "2003-12-13T08:29:29-04:00",
-	      "content" : {
-	        "div" : {
-	          "xmlns" : "http://www.w3.org/1999/xhtml",
-	          "p" : {
-	            "i" : "[Update: The Atom draft is finished.]"
-	          }
-	        },
-	        "xml$lang" : "en",
-	        "type" : "xhtml"
-	      },
-	      "author" : {
-	        "name" : "Mark Pilgrim"
-	      },
-	      "updated" : "2005-07-31T12:29:29Z",
-	      "id" : "tag:example.org,2003:3.2397",
-	      "title" : "Atom draft-07 snapshot"
-	    },
-	    "title" : "dive into mark",
-	    "id" : "tag:example.org,2003:3",
-	    "updated" : "2005-07-31T12:29:29Z"
-	  },
-	}
-
-=head2 Perl hash reference
-
-	$VAR1 = {
-	  'version' => '1.0',
-	  'encoding' => 'utf-8',
-	  'feed' => {
-	    'link' => [
-	      {
-	        'rel' => 'alternate',
-	        'href' => 'http://example.org/',
-	        'type' => 'text/html',
-	        'hreflang' => 'en'
-	      },
-	      {
-	        'rel' => 'self',
-	        'href' => 'http://example.org/feed.atom',
-	        'type' => 'application/atom+xml'
-	      }
-	    ],
-	    'xmlns' => 'http://www.w3.org/2005/Atom',
-	    'entry' => {
-	      'link' => {
-	        'rel' => 'alternate',
-	        'href' => 'http://example.org/2005/04/02/atom',
-	        'type' => 'text/html'
-	      },
-	      'published' => '2003-12-13T08:29:29-04:00',
-	      'content' => {
-	        'div' => {
-	          'xmlns' => 'http://www.w3.org/1999/xhtml',
-	          'p' => {
-	            'i' => '[Update: The Atom draft is finished.]'
-	          }
-	        },
-	        'type' => 'xhtml',
-	        'xml:lang' => 'en'
-	      },
-	      'author' => {
-	        'name' => 'Mark Pilgrim'
-	      },
-	      'updated' => '2005-07-31T12:29:29Z',
-	      'id' => 'tag:example.org,2003:3.2397',
-	      'title' => 'Atom draft-07 snapshot'
-	    },
-	    'updated' => '2005-07-31T12:29:29Z',
-	    'id' => 'tag:example.org,2003:3',
-	    'title' => 'dive into mark'
-	  },
-	};
+    {
+      "feed" : {
+        "xmlns" : "http://www.w3.org/2005/Atom",
+        "title" : {
+          "$t" : "Test Feed"
+        },
+        "id" : {
+          "$t" : "tag:example.com,2007:1"
+        },
+        "updated" : {
+          "$t" : "2007-01-01T00:00:00Z"
+        },
+        "link" : {
+          "rel" : "self",
+          "href" : "http://example.com/feed.atom"
+        },
+        "entry" : [
+          {
+            "published" : {
+              "$t" : "2007-02-01T00:00:00Z"
+            },
+            "link" : [
+              {
+                "rel" : "alternate",
+                "href" : "http://example.com/1"
+              },
+              {
+                "rel" : "edit",
+                "href" : "http://example.com/edit/1"
+              }
+            ],
+            "content" : {
+              "div" : {
+                "xmlns" : "http://www.w3.org/1999/xhtml",
+                "span" : {
+                  "$t" : "Test 1"
+                }
+              },
+              "type" : "xhtml"
+            },
+            "title" : {
+              "$t" : "Test Entry 1"
+            },
+            "id" : {
+              "$t" : "tag:example.com,2007:2"
+            },
+            "updated" : {
+              "$t" : "2007-02-01T00:00:00Z"
+            },
+            "author" : {
+              "email" : {
+                "$t" : "foo@example.com"
+              },
+              "name" : {
+                "$t" : "Foo"
+              }
+            }
+          },
+          {
+            "published" : {
+              "$t" : "2007-03-01T00:00:00Z"
+            },
+            "link" : [
+              {
+                "rel" : "alternate",
+                "href" : "http://example.com/2"
+              },
+              {
+                "rel" : "edit",
+                "href" : "http://example.com/edit/2"
+              }
+            ],
+            "content" : {
+              "div" : {
+                "xmlns" : "http://www.w3.org/1999/xhtml",
+                "span" : {
+                  "$t" : "Test 2"
+                }
+              },
+              "type" : "xhtml"
+            },
+            "title" : {
+              "$t" : "Test Entry 2"
+            },
+            "id" : {
+              "$t" : "tag:example.com,2007:3"
+            },
+            "updated" : {
+              "$t" : "2007-03-01T00:00:00Z"
+            },
+            "author" : {
+              "email" : {
+                "$t" : "bar@example.com"
+              },
+              "name" : {
+                "$t" : "Bar"
+              }
+            }
+          }
+        ]
+      }
+    }
 
 =head1 SEE ALSO
 

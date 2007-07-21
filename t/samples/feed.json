@@ -1,1 +1,102 @@
-{"feed":{"rights":"Copyright (c) 2003, Mark Pilgrim","link":[{"rel":"alternate","href":"http://example.org/","type":"text/html","hreflang":"en"},{"rel":"self","href":"http://example.org/feed.atom","type":"application/atom+xml"}],"xmlns":"http://www.w3.org/2005/Atom","entry":{"link":[{"rel":"alternate","href":"http://example.org/2005/04/02/atom","type":"text/html"},{"rel":"enclosure","length":"1337","href":"http://example.org/audio/ph34r_my_podcast.mp3","type":"audio/mpeg"}],"published":"2003-12-13T08:29:29-04:00","content":{"div":{"p":{"i":"[Update: The Atom draft is finished.]"},"xmlns$xhtml":"http://www.w3.org/1999/xhtml"},"xml$lang":"en","type":"xhtml"},"author":{"email":"f8dy@example.com","foaf$homepage":{"rdf$resource":"http://www.example.org/blog"},"foaf$img":{"rdf$resource":"http://www.example.org/mypic.png"},"name":"Mark Pilgrim","uri":"http://example.org/"},"updated":"2005-07-31T12:29:29Z","id":"tag:example.org,2003:3.2397","title":"Atom draft-07 snapshot","contributor":[{"name":"Sam Ruby"},{"name":"Joe Gregorio"}]},"xmlns$rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#","generator":{"$t":"\n    Example Toolkit\n  ","version":"1.0","uri":"http://www.example.com/"},"xmlns$foaf":"http://xmlns.com/foaf/0.1","title":{"$t":"dive into mark","type":"text"},"id":"tag:example.org,2003:3","updated":"2005-07-31T12:29:29Z"},"version":"1.0","encoding":"utf-8"}
+{
+  "feed" : {
+    "xmlns" : "http://www.w3.org/2005/Atom",
+    "title" : {
+      "$t" : "Test Feed"
+    },
+    "id" : {
+      "$t" : "tag:example.com,2007:1"
+    },
+    "updated" : {
+      "$t" : "2007-01-01T00:00:00Z"
+    },
+    "link" : {
+      "rel" : "self",
+      "href" : "http://example.com/feed.atom"
+    },
+    "entry" : [
+      {
+        "published" : {
+          "$t" : "2007-02-01T00:00:00Z"
+        },
+        "link" : [
+          {
+            "rel" : "alternate",
+            "href" : "http://example.com/1"
+          },
+          {
+            "rel" : "edit",
+            "href" : "http://example.com/edit/1"
+          }
+        ],
+        "content" : {
+          "div" : {
+            "xmlns" : "http://www.w3.org/1999/xhtml",
+            "span" : {
+              "$t" : "Test 1"
+            }
+          },
+          "type" : "xhtml"
+        },
+        "title" : {
+          "$t" : "Test Entry 1"
+        },
+        "id" : {
+          "$t" : "tag:example.com,2007:2"
+        },
+        "updated" : {
+          "$t" : "2007-02-01T00:00:00Z"
+        },
+        "author" : {
+          "email" : {
+            "$t" : "foo@example.com"
+          },
+          "name" : {
+            "$t" : "Foo"
+          }
+        }
+      },
+      {
+        "published" : {
+          "$t" : "2007-03-01T00:00:00Z"
+        },
+        "link" : [
+          {
+            "rel" : "alternate",
+            "href" : "http://example.com/2"
+          },
+          {
+            "rel" : "edit",
+            "href" : "http://example.com/edit/2"
+          }
+        ],
+        "content" : {
+          "div" : {
+            "xmlns" : "http://www.w3.org/1999/xhtml",
+            "span" : {
+              "$t" : "Test 2"
+            }
+          },
+          "type" : "xhtml"
+        },
+        "title" : {
+          "$t" : "Test Entry 2"
+        },
+        "id" : {
+          "$t" : "tag:example.com,2007:3"
+        },
+        "updated" : {
+          "$t" : "2007-03-01T00:00:00Z"
+        },
+        "author" : {
+          "email" : {
+            "$t" : "bar@example.com"
+          },
+          "name" : {
+            "$t" : "Bar"
+          }
+        }
+      }
+    ]
+  }
+}
