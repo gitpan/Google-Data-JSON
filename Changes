@@ -1,3 +1,9 @@
+2007-07-24  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.1.2:
+	* Google/Data/JSON.pm:
+	- fix a bug of XML::Atom conversion
+
 2007-07-22  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.1.1:
