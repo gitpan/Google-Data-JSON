@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.1.2');
+use version; our $VERSION = qv('0.1.3');
 
 use XML::Simple;
 use JSON::Syck;
@@ -37,7 +37,7 @@ sub new {
     $stream = read_file $stream if $stream !~ /[\r\n]/ && -f $stream;
     my $type = ref($stream) =~ /^XML::Atom/ ? 'atom'
 	     : ref($stream) eq 'HASH'       ? 'hash'
-	     :     $stream  =~ /^<\?xml/    ? 'xml'
+	     :     $stream  =~ /^</         ? 'xml'
 	     :     $stream  =~ /^\{/        ? 'json'
 	     :                                croak "Bad stream: $stream" ;
     bless { $type => $stream }, $class;
