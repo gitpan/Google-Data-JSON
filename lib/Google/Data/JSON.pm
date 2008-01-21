@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.1.3');
+use version; our $VERSION = qv('0.1.4');
 
 use XML::Simple;
 use JSON::Syck;
@@ -186,10 +186,10 @@ Google::Data::JSON - General XML-JSON converter based on Google Data APIs
     $hash = gdata($xml)->as_hash;
 
     ## Convert a JSON into an XML document.
-    $xml = $gdata($json)->as_xml;
+    $xml = gdata($json)->as_xml;
 
     ## Convert a JSON into an Atom object.
-    $atom = $gdata($json)->as_atom;
+    $atom = gdata($json)->as_atom;
 
 =head1 DESCRIPTION
 

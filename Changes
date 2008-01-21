@@ -1,3 +1,9 @@
+2008-08-21  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.1.4:
+	* Google/Data/JSON.pm:
+	- fix SYNOPSIS
+
 2007-07-25  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.1.3:
