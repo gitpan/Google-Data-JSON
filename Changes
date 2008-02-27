@@ -1,4 +1,10 @@
-2008-08-21  Takeru INOUE  <takeru.inoue _ gmail.com>
+2008-02-27  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.1.5:
+	* Google/Data/JSON.pm:
+	- use JSON::Any insteadof JSON::Syck
+
+2007-08-21  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.1.4:
 	* Google/Data/JSON.pm:

@@ -4,10 +4,10 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.1.4');
+use version; our $VERSION = qv('0.1.5');
 
 use XML::Simple;
-use JSON::Syck;
+use JSON::Any;
 use List::MoreUtils qw( any uniq );
 use File::Slurp;
 use Perl6::Export::Attrs;
@@ -139,13 +139,13 @@ sub hash_to_xml :Export { XMLout( $_[0], %{ $CONFIG->{XMLout} } ) }
 
 sub hash_to_atom :Export { xml_to_atom( hash_to_xml(@_) ) }
 
-sub hash_to_json :Export { JSON::Syck::Dump( $_[0] ) }
+sub hash_to_json :Export { JSON::Any->objToJson( $_[0] ) }
 
 sub json_to_xml :Export { hash_to_xml( json_to_hash(@_) ) }
 
 sub json_to_atom :Export { hash_to_atom( json_to_hash(@_) ) }
 
-sub json_to_hash :Export { JSON::Syck::Load( $_[0] ) }
+sub json_to_hash :Export { JSON::Any->jsonToObj( $_[0] ) }
 
 sub as_hashref {
     warn 'as_hashref is DEPRECATED and renamed to as_hash';
