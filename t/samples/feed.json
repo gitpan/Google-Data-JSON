@@ -1,6 +1,7 @@
 {
   "feed" : {
     "xmlns" : "http://www.w3.org/2005/Atom",
+    "xmlns$openSearch" : "http://a9.com/-/spec/opensearchrss/1.0/",
     "title" : {
       "$t" : "Test Feed"
     },
@@ -13,6 +14,9 @@
     "link" : {
       "rel" : "self",
       "href" : "http://example.com/feed.atom"
+    },
+    "openSearch$startIndex" : {
+      "$t" : "1"
     },
     "entry" : [
       {

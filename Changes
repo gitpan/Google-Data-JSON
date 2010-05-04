@@ -1,8 +1,17 @@
+2010-05-05  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.1.6:
+	* Google/Data/JSON.pm:
+	- fix a bug on the XML namespace conversion rules;
+	  e.g., 'openSearch:startIndex' to 'openSearch$startIndex'
+	- add non-DWIM constructors
+	- thanks miyagawa
+
 2008-02-27  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.1.5:
 	* Google/Data/JSON.pm:
-	- use JSON::Any insteadof JSON::Syck
+	- use JSON::Any instead of JSON::Syck
 
 2007-08-21  Takeru INOUE  <takeru.inoue _ gmail.com>
 

@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:openSearch="http://a9.com/-/spec/opensearchrss/1.0/">
   <title>Test Feed</title>
   <id>tag:example.com,2007:1</id>
   <updated>2007-01-01T00:00:00Z</updated>
   <link rel="self" href="http://example.com/feed.atom"/>
+  <openSearch:startIndex>1</openSearch:startIndex>
   <entry>
     <title>Test Entry 1</title>
     <id>tag:example.com,2007:2</id>

@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.1.5');
+use version; our $VERSION = qv('0.1.6');
 
 use XML::Simple;
 use JSON::Any;
@@ -33,14 +33,21 @@ my $CONFIG = {
 
 sub new {
     my $class  = shift;
-    my ($stream) = @_;
-    $stream = read_file $stream if $stream !~ /[\r\n]/ && -f $stream;
-    my $type = ref($stream) =~ /^XML::Atom/ ? 'atom'
-	     : ref($stream) eq 'HASH'       ? 'hash'
-	     :     $stream  =~ /^</         ? 'xml'
-	     :     $stream  =~ /^\{/        ? 'json'
-	     :                                croak "Bad stream: $stream" ;
-    bless { $type => $stream }, $class;
+    if (scalar @_ > 1) {
+        my ($type, $stream) = @_;
+        $stream = read_file $stream if $stream !~ /[\r\n]/ && -f $stream;
+        bless { $type => $stream }, $class;
+    }
+    else {
+        my ($stream) = @_;
+        $stream = read_file $stream if $stream !~ /[\r\n]/ && -f $stream;
+        my $type = ref($stream) =~ /^XML::Atom/ ? 'atom'
+                 : ref($stream) eq 'HASH'       ? 'hash'
+                 :     $stream  =~ /^</         ? 'xml'
+                 :     $stream  =~ /^\{/        ? 'json'
+                 :                                croak "Bad stream: $stream" ;
+        bless { $type => $stream }, $class;
+    }
 }
 
 sub gdata :Export { __PACKAGE__->new(@_) }
@@ -125,7 +132,7 @@ sub xml_to_atom :Export {
     return $module->new(\$xml);
 }
 
-sub xml_to_hash :Export { XMLin( $_[0], %{ $CONFIG->{XMLin} } ) }
+sub xml_to_hash :Export { fix_ns( XMLin( $_[0], %{ $CONFIG->{XMLin} } ) ) }
 
 sub xml_to_json :Export { hash_to_json( xml_to_hash(@_) ) }
 
@@ -135,7 +142,7 @@ sub atom_to_hash :Export { xml_to_hash( atom_to_xml(@_) ) }
 
 sub atom_to_json :Export { xml_to_json( atom_to_xml(@_) ) }
 
-sub hash_to_xml :Export { XMLout( $_[0], %{ $CONFIG->{XMLout} } ) }
+sub hash_to_xml :Export { XMLout( fix_ns2($_[0]), %{ $CONFIG->{XMLout} } ) }
 
 sub hash_to_atom :Export { xml_to_atom( hash_to_xml(@_) ) }
 
@@ -167,6 +174,40 @@ sub json_to_hashref :Export {
     json_to_hash(@_);
 }
 
+sub fix_ns {
+    my ($h) = shift;
+    for my $k (keys %$h) {
+        if (UNIVERSAL::isa($h->{$k}, 'HASH')) {
+            $h->{$k} = fix_ns($h->{$k});
+        }
+        elsif (UNIVERSAL::isa($h->{$k}, 'ARRAY')) {
+            $h->{$k} = [ map fix_ns($_), @{ $h->{$k} } ];
+        }
+        if ($k =~ /(.+):(.+)/) {
+            $h->{"$1\$$2"} = $h->{$k};
+            delete $h->{$k};
+        }
+    }
+    return $h;
+}
+
+sub fix_ns2 {
+    my ($h) = shift;
+    for my $k (keys %$h) {
+        if (UNIVERSAL::isa($h->{$k}, 'HASH')) {
+            $h->{$k} = fix_ns2($h->{$k});
+        }
+        elsif (UNIVERSAL::isa($h->{$k}, 'ARRAY')) {
+            $h->{$k} = [ map fix_ns2($_), @{ $h->{$k} } ];
+        }
+        if ($k =~ /(.+)\$(.+)/) {
+            $h->{"$1:$2"} = $h->{$k};
+            delete $h->{$k};
+        }
+    }
+    return $h;
+}
+
 1; # Magic true value required at end of module
 __END__
 
@@ -181,6 +222,7 @@ Google::Data::JSON - General XML-JSON converter based on Google Data APIs
 
     ## Convert an XML document into a JSON.
     $json = gdata($xml)->as_json;
+    # or $json = Google::Data::JSON->new(xml => $xml)->as_json;
 
     ## Convert an XML document into a Perl HASH.
     $hash = gdata($xml)->as_hash;
@@ -228,7 +270,7 @@ encoding of the root element, respectively.
 
 =head1 METHODS
 
-=head2 Google::Data::JSON->new($stream)
+=head2 Google::Data::JSON->new($stream or type => $stream)
 
 Creates a new parser object from I<$stream>, such as XML and JSON,
 and returns the new Google::Data::JSON object.
@@ -258,7 +300,9 @@ combined with HASH and ARRAY.
 
 =back
 
-=head2 gdata($stream)
+I<type> must be xml, atom, json, or hash.
+
+=head2 gdata($stream or type => $stream)
 
 Shortcut for Google::Data::JSON->new() .
 
@@ -329,11 +373,13 @@ The following example shows XML and JSON versions of the same document:
 =head2 XML
 
     <?xml version="1.0" encoding="utf-8"?>
-    <feed xmlns="http://www.w3.org/2005/Atom">
+    <feed xmlns="http://www.w3.org/2005/Atom"
+          xmlns:openSearch="http://a9.com/-/spec/opensearchrss/1.0/">
       <title>Test Feed</title>
       <id>tag:example.com,2007:1</id>
       <updated>2007-01-01T00:00:00Z</updated>
       <link rel="self" href="http://example.com/feed.atom"/>
+      <openSearch:startIndex>1</openSearch:startIndex>
       <entry>
         <title>Test Entry 1</title>
         <id>tag:example.com,2007:2</id>
@@ -375,6 +421,7 @@ The following example shows XML and JSON versions of the same document:
     {
       "feed" : {
         "xmlns" : "http://www.w3.org/2005/Atom",
+        "xmlns$openSearch" : "http://a9.com/-/spec/opensearchrss/1.0/",
         "title" : {
           "$t" : "Test Feed"
         },
@@ -387,6 +434,9 @@ The following example shows XML and JSON versions of the same document:
         "link" : {
           "rel" : "self",
           "href" : "http://example.com/feed.atom"
+        },
+        "openSearch$startIndex" : {
+          "$t" : "1"
         },
         "entry" : [
           {
