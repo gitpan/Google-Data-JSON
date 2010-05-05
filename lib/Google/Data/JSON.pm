@@ -2,16 +2,16 @@ package Google::Data::JSON;
 
 use warnings;
 use strict;
-use Carp;
 
-use version; our $VERSION = qv('0.1.6');
+use version; our $VERSION = qv('0.1.7');
 
-use XML::Simple;
+use File::Slurp;
 use JSON::Any;
 use List::MoreUtils qw( any uniq );
-use File::Slurp;
 use Perl6::Export::Attrs;
+use Storable qw(dclone);
 use UNIVERSAL::require;
+use XML::Simple;
 
 ## XML::Simple
 my $CONFIG = {
@@ -31,23 +31,54 @@ my $CONFIG = {
     }
 };
 
+use vars qw( $ERROR );
+
+sub error {
+    my $msg = $_[1] || '';
+    $msg .= "\n" unless $msg =~ /\n$/;
+    if (ref($_[0])) {
+        $_[0]->{_errstr} = $msg;
+    } else {
+        $ERROR = $msg;
+    }
+    return;
+}
+
+sub errstr { ref($_[0]) ? $_[0]->{_errstr} : $ERROR }
+
 sub new {
     my $class  = shift;
-    if (scalar @_ > 1) {
-        my ($type, $stream) = @_;
-        $stream = read_file $stream if $stream !~ /[\r\n]/ && -f $stream;
-        bless { $type => $stream }, $class;
+    my ($type, $stream);
+    if (@_ > 1) {
+        ($type, $stream) = @_;
+        if ($type eq 'file') {
+            $stream = read_file $stream;
+            $type = get_type_as_dwim($stream);
+        }
     }
     else {
-        my ($stream) = @_;
+        warn 'DWIM-style constructor is DEPRECATED';
+        ($stream) = @_;
         $stream = read_file $stream if $stream !~ /[\r\n]/ && -f $stream;
-        my $type = ref($stream) =~ /^XML::Atom/ ? 'atom'
-                 : ref($stream) eq 'HASH'       ? 'hash'
-                 :     $stream  =~ /^</         ? 'xml'
-                 :     $stream  =~ /^\{/        ? 'json'
-                 :                                croak "Bad stream: $stream" ;
-        bless { $type => $stream }, $class;
+        $type = get_type_as_dwim($stream);
     }
+    return __PACKAGE__->error("Bad type: $type")
+        unless $type eq 'xml' || $type eq 'json' || $type eq 'hash' || $type eq 'atom';
+    return __PACKAGE__->error("Bad stream: $type => $stream")
+        if ($type eq 'xml'  && $stream !~ /^</)
+        || ($type eq 'json' && $stream !~ /^\{/)
+        || ($type eq 'hash' && !UNIVERSAL::isa($stream, 'HASH'))
+        || ($type eq 'atom' && !UNIVERSAL::isa($stream, 'XML::Atom::Base'));
+    bless { $type => $stream }, $class;
+}
+
+sub get_type_as_dwim {
+    my ($stream) = @_;
+    return UNIVERSAL::isa($stream, 'XML::Atom::Base') ? 'atom'
+         : UNIVERSAL::isa($stream, 'HASH')            ? 'hash'
+         : $stream  =~ /^\{/                          ? 'json'
+         : $stream  =~ /^</                           ? 'xml'
+         : __PACKAGE__->error("Bad stream: $stream");
 }
 
 sub gdata :Export { __PACKAGE__->new(@_) }
@@ -128,7 +159,7 @@ sub xml_to_atom :Export {
     my ($xml) = shift;
     my ($root) = $xml =~ /<\?xml[^>]+?\?>\s*<(?:\w+:)?(\w+)/ms;
     my $module = 'XML::Atom::' . ucfirst($root);
-    "$module"->require || croak $@;
+    "$module"->require or return __PACKAGE__->error($@);
     return $module->new(\$xml);
 }
 
@@ -142,7 +173,7 @@ sub atom_to_hash :Export { xml_to_hash( atom_to_xml(@_) ) }
 
 sub atom_to_json :Export { xml_to_json( atom_to_xml(@_) ) }
 
-sub hash_to_xml :Export { XMLout( fix_ns2($_[0]), %{ $CONFIG->{XMLout} } ) }
+sub hash_to_xml :Export { XMLout( fix_ns2(dclone $_[0]), %{ $CONFIG->{XMLout} } ) }
 
 sub hash_to_atom :Export { xml_to_atom( hash_to_xml(@_) ) }
 
@@ -218,20 +249,17 @@ Google::Data::JSON - General XML-JSON converter based on Google Data APIs
 
 =head1 SYNOPSIS
 
-    use Google::Data::JSON qw( gdata );
+    use Google::Data::JSON;
 
-    ## Convert an XML document into a JSON.
-    $json = gdata($xml)->as_json;
-    # or $json = Google::Data::JSON->new(xml => $xml)->as_json;
+    ## Convert an XML document into a JSON and a Perl HASH.
+    $gdata = Google::Data::JSON->new(xml => $xml);
+    $json  = $gdata->as_json;
+    $hash  = $gdata->as_hash;
 
-    ## Convert an XML document into a Perl HASH.
-    $hash = gdata($xml)->as_hash;
-
-    ## Convert a JSON into an XML document.
-    $xml = gdata($json)->as_xml;
-
-    ## Convert a JSON into an Atom object.
-    $atom = gdata($json)->as_atom;
+    ## Convert a JSON into an XML document and an Atom object.
+    $gdata = Google::Data::JSON->new(json => $json);
+    $xml   = $gdata->as_xml;
+    $atom  = $gdata->as_atom;
 
 =head1 DESCRIPTION
 
@@ -270,41 +298,43 @@ encoding of the root element, respectively.
 
 =head1 METHODS
 
-=head2 Google::Data::JSON->new($stream or type => $stream)
+=head2 Google::Data::JSON->new($type => $stream)
 
-Creates a new parser object from I<$stream>, such as XML and JSON,
+Creates a new parser object from I<$stream> of I<$type>,
 and returns the new Google::Data::JSON object.
 On failure, return "undef";
 
-I<$stream> can be any one of the following:
+I<$type> must be one of the followings:
 
 =over 4
 
-=item A filename
+=item xml
 
-A filename of XML or JSON.
+I<$stream> must be a string containing XML.
 
-=item A string of XML or JSON
+=item json
 
-A string containing XML or JSON.
+I<$stream> must be a string containing JSON.
 
-=item An XML::Atom object
+=item atom
 
-An XML::Atom object, such as XML::Atom::Feed, XML::Atom::Entry, 
-XML::Atom::Service, and XML::Atom::Categories.
+I<$stream> must be an XML::Atom object, such as XML::Atom::Feed,
+XML::Atom::Entry, XML::Atom::Service, and XML::Atom::Categories.
 
-=item A Perl HASH
+=item hash
 
-A Perl hash referece, strictly saying, that is a reference to a data structure
-combined with HASH and ARRAY.
+I<$stream> must be a Perl hash referece, strictly saying,
+that is a reference to a data structure combined with HASH and ARRAY.
+
+=item file
+
+I<$stream> must be a filename of XML or JSON.
 
 =back
 
-I<type> must be xml, atom, json, or hash.
-
 =head2 gdata($stream or type => $stream)
 
-Shortcut for Google::Data::JSON->new() .
+Shortcut for Google::Data::JSON->new(...).
 
 =head2 $gdata->as_xml
 
@@ -325,6 +355,17 @@ Converts into a Perl HASH.
 =head2 $gdata->as_hashref
 
 DEPRECATED
+
+=head2 Google::Data::JSON->errstr or $gdata->errstr
+
+Returns an error message.
+
+
+=head1 INTERNAL METHODS
+
+=head2 error($message)
+
+=head2 get_type_as_dwim($stream)
 
 =head2 xml_to_json($xml)
 
@@ -361,6 +402,10 @@ DEPRECATED
 =head2 xml_to_hashref
 
 DEPRECATED
+
+=head2 fix_ns($hash)
+
+=head2 fix_ns2($hash)
 
 =head1 EXPORT
 

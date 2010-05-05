@@ -16,7 +16,7 @@ name: Google-Data-JSON
 provides:
   Google::Data::JSON:
     file: lib/Google/Data/JSON.pm
-    version: v0.1.6
+    version: v0.1.7
 requires:
   File::Slurp: 0
   JSON::Any: 0
@@ -28,4 +28,4 @@ requires:
   version: 0
 resources:
   license: http://dev.perl.org/licenses/
-version: v0.1.6
+version: v0.1.7

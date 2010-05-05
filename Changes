@@ -1,11 +1,21 @@
+2010-05-06  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.1.7:
+	* Google/Data/JSON.pm:
+	- fix a bug on t/pod-coverage.t
+	- add a keyword "file" for the non-DWIM constructor, in order
+	  to read the file explicitly
+	- make the DWIM constructor deprecated
+	- thanks Miyagawa
+
 2010-05-05  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.1.6:
 	* Google/Data/JSON.pm:
 	- fix a bug on the XML namespace conversion rules;
 	  e.g., 'openSearch:startIndex' to 'openSearch$startIndex'
-	- add non-DWIM constructors
-	- thanks miyagawa
+	- add a non-DWIM constructor
+	- thanks Miyagawa
 
 2008-02-27  Takeru INOUE  <takeru.inoue _ gmail.com>
 

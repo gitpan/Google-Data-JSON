@@ -21,6 +21,8 @@ my $builder = Module::Build->new(
         'Test::More'           => 0,
         'Test::NoWarnings'     => 0,
 #        'Test::Perl::Critic'   => 0,
+#        'Test::Pod'            => 1.14,
+#        'Test::Pod::Coverage'  => 1.04,
     },
     add_to_cleanup      => [ 'Google-Data-JSON-*' ],
 );
