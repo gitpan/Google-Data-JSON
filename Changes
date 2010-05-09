@@ -1,3 +1,11 @@
+2010-05-09  Takeru INOUE  <takeru.inoue _ gmail.com>
+
+	* release 0.1.8:
+	* t/perlcritic.t
+	- add t/perlcriticrc to access to private vars in other
+	  packages
+	- use eval to avoid a module locating error	
+
 2010-05-06  Takeru INOUE  <takeru.inoue _ gmail.com>
 
 	* release 0.1.7:

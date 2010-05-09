@@ -3,7 +3,7 @@ package Google::Data::JSON;
 use warnings;
 use strict;
 
-use version; our $VERSION = qv('0.1.7');
+use version; our $VERSION = qv('0.1.8');
 
 use File::Slurp;
 use JSON::Any;
