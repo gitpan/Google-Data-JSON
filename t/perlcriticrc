@@ -1,2 +1,0 @@
-# allow access to private vars in other packages
-[-Variables::ProtectPrivateVars]
