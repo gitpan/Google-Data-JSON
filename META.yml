@@ -6,8 +6,9 @@ build_requires:
   Test::More: 0
   Test::NoWarnings: 0
 configure_requires:
-  Module::Build: 0.36
-generated_by: 'Module::Build version 0.3607'
+  Module::Build: 0.38
+dynamic_config: 1
+generated_by: 'Module::Build version 0.38, CPAN::Meta::Converter version 2.112621'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -16,7 +17,7 @@ name: Google-Data-JSON
 provides:
   Google::Data::JSON:
     file: lib/Google/Data/JSON.pm
-    version: v0.1.9
+    version: v0.1.10
 requires:
   File::Slurp: 0
   JSON::Any: 0
@@ -28,4 +29,4 @@ requires:
   version: 0
 resources:
   license: http://dev.perl.org/licenses/
-version: v0.1.9
+version: v0.1.10

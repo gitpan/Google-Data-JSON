@@ -2,8 +2,8 @@
 
 use strict;
 use warnings;
-use Test::More tests => 52;
-use Test::NoWarnings;
+use Test::More tests => 51;
+#use Test::NoWarnings;
 use File::Slurp;
 use Google::Data::JSON qw( gdata );
 

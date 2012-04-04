@@ -12,3 +12,4 @@ t/pod-coverage.t
 t/pod.t
 t/samples/feed.atom
 t/samples/feed.json
+META.json
